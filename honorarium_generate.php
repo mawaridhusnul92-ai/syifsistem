@@ -351,55 +351,94 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const pInp = document.querySelector(`#hr_${rowId} .inp-prodi`);
         if (opt && opt.value && pInp) pInp.value = opt.dataset.prodi || '';
         // Saat dosen berganti, update tarif jika ada is_jafung
-        updateJafungTarif(rowId, opt ? (opt.dataset.jabatan || '') : '');
+        const jabatan = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
+        updateJafungTarif(rowId, jabatan);
     }
 
     /**
      * updateJafungTarif — update nilai tarif pada sel-sel yang is_jafung=true
-     * berdasarkan jabatan fungsional dosen yang dipilih
+     * berdasarkan jabatan fungsional dosen yang dipilih.
+     * FIX: Mencakup horizGroups DAN vertGroup, plus fallback is_jafung dari masterTarif.
      */
     function updateJafungTarif(rowId, jabatan) {
         const tbody = document.getElementById(`hr_${rowId}`);
         if (!tbody) return;
 
-        // Cek semua grup horizontal yang is_jafung
-        for (const g in horizGroups) {
-            const firstItem = horizGroups[g][0] || {};
-            if (!firstItem.is_jafung) continue; // skip grup yang bukan jafung
+        let pajakBaru = null;
 
-            horizGroups[g].forEach(c => {
-                const rid   = c.id_rincian;
-                const mData = masterTarif[rid] || null;
-                if (!mData) return;
-                const kompId = String(mData.komp_id);
+        // ── Helper: proses satu item komponen ────────────────────────
+        function processItem(c) {
+            const rid   = c.id_rincian;
+            const mData = masterTarif[rid] || null;
+            if (!mData) return;
 
-                // Cari tarif yang cocok dengan jabatan
-                let tarifBaru = mData.besaran; // default
-                let pajakBaru = mData.potongan_pajak;
-                let ridBaru   = rid;
+            // Cek is_jafung: dari template JSON atau dari masterTarif (fallback)
+            const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
+            if (!isJafung) return; // skip jika bukan jafung
 
-                if (jabatan && jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
-                    const jt = jafungTarif[kompId][jabatan];
-                    tarifBaru = jt.besaran;
-                    pajakBaru = jt.potongan_pajak;
-                    ridBaru   = jt.id;
+            const kompId = String(mData.komp_id);
+
+            // Cari tarif yang cocok dengan jabatan dosen
+            let tarifBaru = mData.besaran;
+            let pajak     = mData.potongan_pajak;
+            let ridBaru   = String(rid);
+
+            if (jabatan && jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
+                const jt  = jafungTarif[kompId][jabatan];
+                tarifBaru = jt.besaran;
+                pajak     = jt.potongan_pajak;
+                ridBaru   = String(jt.id);
+            }
+
+            // Update hidden rincian_ids di td-qty dengan rid baru
+            const tdQty = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
+            if (tdQty) {
+                const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
+                if (hidRid) {
+                    // Ganti data-rid di semua td yang masih pakai rid lama
+                    if (ridBaru !== String(rid)) {
+                        tbody.querySelectorAll(`td[data-rid="${rid}"]`).forEach(td => {
+                            td.dataset.rid = ridBaru;
+                        });
+                    }
+                    hidRid.value = ridBaru;
                 }
+            }
 
-                // Update input tarif di sel ini
-                const tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
-                if (tdTarif) {
-                    const trfInp = tdTarif.querySelector('.inp-tarif');
-                    if (trfInp) trfInp.value = fmtRp(tarifBaru);
-                    // Update hidden rid jika tarif beda per jabatan
-                    const hidRid = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"] input[name="rincian_ids[]"]`);
-                    if (hidRid) hidRid.value = ridBaru;
+            // Update tarif di td-tarif (pakai ridBaru karena data-rid sudah diupdate)
+            const tdTarif = tbody.querySelector(`td[data-rid="${ridBaru}"][data-role="td-tarif"]`);
+            if (tdTarif) {
+                const trfInp = tdTarif.querySelector('.inp-tarif');
+                if (trfInp) {
+                    trfInp.value = fmtRp(tarifBaru);
+                    // Highlight visual singkat agar user tahu tarif berubah
+                    trfInp.style.background = '#fef9c3';
+                    trfInp.style.color = '#b45309';
+                    setTimeout(() => {
+                        trfInp.style.background = '';
+                        trfInp.style.color = '';
+                    }, 1500);
                 }
+            }
 
-                // Update pajak di baris ini
-                const pajakInp = tbody.querySelector('.inp-pajak-pct');
-                if (pajakInp) { pajakInp.value = pajakBaru; }
-            });
+            if (pajakBaru === null) pajakBaru = pajak;
         }
+
+        // ── Proses semua grup horizontal ─────────────────────────────
+        for (const g in horizGroups) {
+            horizGroups[g].forEach(c => processItem(c));
+        }
+
+        // ── Proses grup vertikal ──────────────────────────────────────
+        const vItems = vertGroup.items || [];
+        vItems.forEach(c => processItem(c));
+
+        // Update pajak jika ada nilai baru
+        if (pajakBaru !== null) {
+            const pajakInp = tbody.querySelector('.inp-pajak-pct');
+            if (pajakInp) pajakInp.value = pajakBaru;
+        }
+
         calcRow(rowId);
     }
 
@@ -787,11 +826,13 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         if (matrixDetails.length > 0) {
             matrixDetails.forEach(d => {
                 addHonorMatrixRow(d);
-                // Setelah baris dirender, trigger update tarif jafung berdasarkan jabatan dosen
+                // BUG FIX #1: capture rCount SEKARANG (sebelum forEach iterasi berikutnya)
+                // agar setiap setTimeout mendapat rowId yang tepat, bukan nilai rCount terakhir.
+                const capturedRowId = rCount;
                 setTimeout(() => {
                     const dosenObj = dosenData.find(dd => String(dd.id) === String(d.dosen_id));
                     if (dosenObj && dosenObj.jabatan_fungsional) {
-                        updateJafungTarif(rCount, dosenObj.jabatan_fungsional);
+                        updateJafungTarif(capturedRowId, dosenObj.jabatan_fungsional);
                     }
                 }, 50);
             });
