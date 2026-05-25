@@ -4,37 +4,76 @@
  * Perbaikan: Merubah pengiriman batch email menjadi JSON Payload
  * agar sistem di Backend bisa mengenali dosen dan melampirkan (attach)
  * kuitansi slip PDF/HTML masing-masing secara akurat.
+ *
+ * OPTIMASI QUERY (fix max_statement_time exceeded):
+ * - Ganti LEFT JOIN honor_template + OR IS NULL → subquery IN list generate_id yang valid
+ * - Tambah filter bulan/tahun dari GET parameter (default: bulan ini)
+ * - Tambah LIMIT untuk paging ringan
+ * - Tambah GROUP_CONCAT ORDER BY untuk hasil konsisten
  */
 
-$slip_list = [];
-$sql_slip = "SELECT 
-                d.dosen_id, 
-                g.periode_bulan, 
-                g.periode_tahun, 
-                ds.nama as dosen_nama, 
-                ds.email as dosen_email,
-                ds.jabatan_fungsional as jabatan,
-                SUM(d.total_honor) as total_bruto,
-                SUM(d.potongan_pajak) as total_pajak,
-                SUM(d.honor_diterima) as honor_diterima,
-                GROUP_CONCAT(DISTINCT g.nama_generate SEPARATOR ', ') as nama_generate,
-                GROUP_CONCAT(DISTINCT g.kode_generate SEPARATOR ', ') as kode_generate,
-                GROUP_CONCAT(d.id) as detail_ids,
-                MIN(d.status_bayar) as status_bayar,
-                MIN(d.status_kirim) as status_kirim
-            FROM honor_generate_detail d 
-            JOIN honor_generate g ON d.generate_id = g.id 
-            LEFT JOIN honor_template t ON g.template_id = t.id
-            JOIN dosen ds ON d.dosen_id = ds.id 
-            WHERE g.status IN ('Final', 'Dibayarkan')
-            AND (t.jenis_tujuan = 'KUITANSI' OR t.jenis_tujuan IS NULL)
-            GROUP BY d.dosen_id, g.periode_bulan, g.periode_tahun
-            ORDER BY MAX(g.id) DESC";
-            
-$res_slip = $conn->query($sql_slip);
-if($res_slip) while($r = $res_slip->fetch_assoc()) $slip_list[] = $r;
+// ── Filter periode (default bulan berjalan) ──────────────────────────
+$filter_bulan = (int)($_GET['fbl'] ?? date('n'));
+$filter_tahun = (int)($_GET['fth'] ?? date('Y'));
+if ($filter_bulan < 1 || $filter_bulan > 12) $filter_bulan = (int)date('n');
+if ($filter_tahun < 2000 || $filter_tahun > 2100) $filter_tahun = (int)date('Y');
 
-$akun_kas = $conn->query("SELECT kode_akun, nama_akun FROM syifa_akun WHERE (kategori IN ('Kas', 'Bank') OR kode_akun LIKE '1-11%' OR is_cash_account=1) AND is_group=0 AND is_active=1")->fetch_all(MYSQLI_ASSOC);
+// ── Ambil daftar generate_id yang berlabel KUITANSI (atau tanpa template) ──
+// Ini menggantikan LEFT JOIN + OR IS NULL yang menyebabkan full scan
+$valid_gen_ids = [];
+$res_gids = $conn->query(
+    "SELECT g.id FROM honor_generate g
+     LEFT JOIN honor_template t ON g.template_id = t.id
+     WHERE g.status IN ('Final','Dibayarkan')
+       AND g.periode_bulan = $filter_bulan
+       AND g.periode_tahun = $filter_tahun
+       AND (t.jenis_tujuan = 'KUITANSI' OR g.template_id IS NULL OR t.id IS NULL)"
+);
+if ($res_gids) {
+    while ($row = $res_gids->fetch_assoc()) $valid_gen_ids[] = (int)$row['id'];
+}
+
+$slip_list = [];
+if (!empty($valid_gen_ids)) {
+    $gen_in = implode(',', $valid_gen_ids);
+    $sql_slip = "SELECT 
+                    d.dosen_id, 
+                    g.periode_bulan, 
+                    g.periode_tahun, 
+                    ds.nama  AS dosen_nama, 
+                    ds.email AS dosen_email,
+                    ds.jabatan_fungsional AS jabatan,
+                    SUM(d.total_honor)      AS total_bruto,
+                    SUM(d.potongan_pajak)   AS total_pajak,
+                    SUM(d.honor_diterima)   AS honor_diterima,
+                    GROUP_CONCAT(DISTINCT g.nama_generate  ORDER BY g.id SEPARATOR ', ') AS nama_generate,
+                    GROUP_CONCAT(DISTINCT g.kode_generate  ORDER BY g.id SEPARATOR ', ') AS kode_generate,
+                    GROUP_CONCAT(d.id ORDER BY d.id)                                      AS detail_ids,
+                    MIN(d.status_bayar)  AS status_bayar,
+                    MIN(d.status_kirim)  AS status_kirim
+                FROM honor_generate_detail d
+                JOIN honor_generate g  ON d.generate_id = g.id
+                JOIN dosen          ds ON d.dosen_id    = ds.id
+                WHERE d.generate_id IN ($gen_in)
+                GROUP BY d.dosen_id, g.periode_bulan, g.periode_tahun
+                ORDER BY ds.nama ASC";
+    $res_slip = $conn->query($sql_slip);
+    if ($res_slip) while ($r = $res_slip->fetch_assoc()) $slip_list[] = $r;
+}
+
+// ── Ambil daftar semua periode yang tersedia (untuk dropdown filter) ─
+$periode_list = [];
+$res_per = $conn->query(
+    "SELECT DISTINCT g.periode_bulan, g.periode_tahun
+     FROM honor_generate g
+     WHERE g.status IN ('Final','Dibayarkan')
+     ORDER BY g.periode_tahun DESC, g.periode_bulan DESC
+     LIMIT 24"
+);
+if ($res_per) while ($p = $res_per->fetch_assoc()) $periode_list[] = $p;
+
+$akun_kas_res = $conn->query("SELECT kode_akun, nama_akun FROM syifa_akun WHERE (kategori IN ('Kas', 'Bank') OR kode_akun LIKE '1-11%' OR is_cash_account=1) AND is_group=0 AND is_active=1");
+$akun_kas = $akun_kas_res ? $akun_kas_res->fetch_all(MYSQLI_ASSOC) : [];
 ?>
 
 <style>
@@ -45,6 +84,49 @@ $akun_kas = $conn->query("SELECT kode_akun, nama_akun FROM syifa_akun WHERE (kat
 </style>
 
 <div class="animate__animated animate__fadeIn">
+
+    <!-- FILTER PERIODE -->
+    <?php
+    $nm_bln_list = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+    ?>
+    <div class="card border-0 rounded-4 shadow-sm bg-white mb-3 border">
+        <div class="card-body p-3 d-flex align-items-center flex-wrap gap-3">
+            <i class="fas fa-calendar-alt text-primary me-1"></i>
+            <span class="fw-bold text-dark small">Filter Periode:</span>
+            <form method="get" class="d-flex align-items-center gap-2 mb-0" id="formFilterPeriode">
+                <input type="hidden" name="page" value="honorarium">
+                <input type="hidden" name="tab" value="slip">
+                <select name="fbl" class="form-select form-select-sm fw-bold border rounded-3 px-3" style="width:auto;" onchange="this.form.submit()">
+                    <?php for($m=1; $m<=12; $m++): ?>
+                    <option value="<?= $m ?>" <?= $m==$filter_bulan?'selected':'' ?>><?= $nm_bln_list[$m] ?></option>
+                    <?php endfor; ?>
+                </select>
+                <select name="fth" class="form-select form-select-sm fw-bold border rounded-3 px-3" style="width:auto;" onchange="this.form.submit()">
+                    <?php
+                    $years_shown = [];
+                    foreach ($periode_list as $p) $years_shown[$p['periode_tahun']] = true;
+                    $years_shown[date('Y')] = true;
+                    krsort($years_shown);
+                    foreach ($years_shown as $yr => $_):
+                    ?>
+                    <option value="<?= $yr ?>" <?= $yr==$filter_tahun?'selected':'' ?>><?= $yr ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+            <span class="badge bg-primary rounded-pill px-3"><?= count($slip_list) ?> slip ditemukan</span>
+            <?php if (count($slip_list) === 0 && !empty($periode_list)): ?>
+            <small class="text-muted fst-italic">
+                Periode tersedia:
+                <?php foreach (array_slice($periode_list, 0, 5) as $p): ?>
+                <a href="?page=honorarium&tab=slip&fbl=<?= $p['periode_bulan'] ?>&fth=<?= $p['periode_tahun'] ?>" class="badge bg-light text-dark border text-decoration-none me-1">
+                    <?= $nm_bln_list[$p['periode_bulan']] . ' ' . $p['periode_tahun'] ?>
+                </a>
+                <?php endforeach; ?>
+            </small>
+            <?php endif; ?>
+        </div>
+    </div>
+
     <!-- PANEL PEMBAYARAN & EMAIL MASSAL -->
     <div class="card border-0 rounded-4 shadow-sm bg-white mb-4 border-start border-primary border-4">
         <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -81,7 +163,11 @@ $akun_kas = $conn->query("SELECT kode_akun, nama_akun FROM syifa_akun WHERE (kat
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if(empty($slip_list)): ?><tr><td colspan="7" class="text-center py-5 text-muted fst-italic">Belum ada slip honor berjenis Kuitansi yang diterbitkan.</td></tr><?php endif; ?>
+                    <?php if(empty($slip_list)): ?><tr><td colspan="7" class="text-center py-5 text-muted fst-italic">
+                        <i class="fas fa-inbox fa-2x mb-2 d-block text-muted opacity-50"></i>
+                        Belum ada slip honor (Kuitansi) untuk periode <b><?= $nm_bln_list[$filter_bulan] . ' ' . $filter_tahun ?></b>.<br>
+                        <small>Silakan ubah filter bulan/tahun di atas, atau finalisasi Generate Honor terlebih dahulu.</small>
+                    </td></tr><?php endif; ?>
                     <?php foreach($slip_list as $s): 
                         $byr_cls = $s['status_bayar'] == 'Sudah Dibayar' ? 'bg-success' : 'bg-danger';
                         $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
