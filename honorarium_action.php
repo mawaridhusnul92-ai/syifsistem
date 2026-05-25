@@ -368,12 +368,26 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Hanya Generate berstatus DRAFT yang bisa diedit!']); break;
             }
 
-            $dosen_ids  = $_POST['dosen_id'] ?? [];
-            $rincian_ids = $_POST['rincian_ids'] ?? [];
+            $dosen_ids   = $_POST['dosen_id'] ?? [];
+            $rincian_ids = $_POST['rincian_ids'] ?? [];   // flat array, all rows combined
 
             if (empty($dosen_ids)) {
                 echo json_encode(['status' => 'error', 'message' => 'Minimal harus ada 1 entri dosen!']); break;
             }
+
+            $n_dosen = count($dosen_ids);
+
+            // Each dosen row contributes exactly the same number of rincian_ids entries.
+            // Divide the flat rincian_ids array into per-row chunks.
+            $rids_per_row = ($n_dosen > 0 && count($rincian_ids) > 0)
+                ? (int)(count($rincian_ids) / $n_dosen)
+                : 0;
+
+            // Build per-occurrence counters so we can correctly index
+            // komp_qty_{rid}[], which is indexed by occurrence-of-that-rid
+            // (not by dosen index), because different dosen rows may use
+            // different rid values for the same component (single_jafung_col mode).
+            $rid_occurrence_counter = [];
 
             $conn->query("START TRANSACTION");
             $conn->query("DELETE FROM honor_generate_detail WHERE generate_id=$gen_id");
@@ -381,7 +395,7 @@ try {
             $total_all = 0;
             $err_msg   = null;
 
-            for ($i = 0; $i < count($dosen_ids); $i++) {
+            for ($i = 0; $i < $n_dosen; $i++) {
                 $did = (int)$dosen_ids[$i];
                 if ($did <= 0) continue;
 
@@ -389,21 +403,32 @@ try {
                 $mk_val     = esc($conn, $_POST['teks_mata_kuliah'][$i] ?? '');
                 $pajak_pct  = (float)($_POST['pajak_pct'][$i] ?? 0);
 
-                // Looping semua rincian untuk dosen ini
-                // rincian_ids adalah array flat dari semua hidden input[name="rincian_ids[]"]
-                // Karena tiap dosen punya set rincian yang sama, kita ambil unique rid
-                $rids_unique = array_unique($rincian_ids);
-                foreach ($rids_unique as $rid) {
+                // Extract this dosen's slice of rincian_ids
+                if ($rids_per_row > 0) {
+                    $row_rids = array_slice($rincian_ids, $i * $rids_per_row, $rids_per_row);
+                } else {
+                    // Fallback: use all unique rids (original behaviour for normal mode)
+                    $row_rids = array_unique($rincian_ids);
+                }
+
+                foreach ($row_rids as $rid) {
                     $rid = (int)$rid;
                     if ($rid <= 0) continue;
+
+                    // Track how many times this rid has been encountered across rows
+                    if (!isset($rid_occurrence_counter[$rid])) {
+                        $rid_occurrence_counter[$rid] = 0;
+                    }
+                    $occ = $rid_occurrence_counter[$rid];
+                    $rid_occurrence_counter[$rid]++;
 
                     $qty_arr  = $_POST["komp_qty_{$rid}"] ?? [];
                     $trf_arr  = $_POST["komp_tarif_{$rid}"] ?? [];
                     $kid_arr  = $_POST["komp_kompId_{$rid}"] ?? [];
 
-                    $qty   = (float)($qty_arr[$i] ?? 0);
-                    $tarif = cleanRp($trf_arr[$i] ?? 0);
-                    $k_id  = (int)($kid_arr[$i] ?? 0);
+                    $qty   = (float)($qty_arr[$occ] ?? 0);
+                    $tarif = cleanRp($trf_arr[$occ] ?? 0);
+                    $k_id  = (int)($kid_arr[$occ] ?? 0);
 
                     if ($qty <= 0) continue; // Skip baris kosong
 

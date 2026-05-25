@@ -424,6 +424,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                     }
                     hidRid.value = ridBaru;
                 }
+                // BUGFIX: update qty/kompId input names to match new rid
+                if (ridBaru !== String(rid)) {
+                    const qtyInp = tdQty.querySelector('.inp-qty');
+                    if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
+                }
             }
 
             // Update tarif di td-tarif (pakai ridBaru karena data-rid sudah diupdate)
@@ -432,6 +437,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                 const trfInp = tdTarif.querySelector('.inp-tarif');
                 if (trfInp) {
                     trfInp.value = fmtRp(tarifBaru);
+                    // BUGFIX: update tarif/kompId input names to match new rid
+                    if (ridBaru !== String(rid)) {
+                        trfInp.name = `komp_tarif_${ridBaru}[]`;
+                        const kidInp = tdTarif.querySelector(`input[name="komp_kompId_${rid}[]"]`);
+                        if (kidInp) kidInp.name = `komp_kompId_${ridBaru}[]`;
+                    }
                     // Highlight visual singkat agar user tahu tarif berubah
                     trfInp.style.background = '#fef9c3';
                     trfInp.style.color = '#b45309';
