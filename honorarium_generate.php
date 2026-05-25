@@ -29,12 +29,18 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     $gen_head = $conn->query("SELECT g.*, t.nama_template, t.custom_layout, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id WHERE g.id = $gen_id")->fetch_assoc();
     
     $matrix_details = [];
-    $res_det = $conn->query("SELECT d.*, ds.nama as dosen_nama, ds.nip FROM honor_generate_detail d LEFT JOIN dosen ds ON d.dosen_id = ds.id WHERE d.generate_id = $gen_id ORDER BY d.id ASC");
+    $res_det = $conn->query("SELECT d.*, ds.nama as dosen_nama, ds.nip, ds.jabatan_fungsional as dosen_jabatan FROM honor_generate_detail d LEFT JOIN dosen ds ON d.dosen_id = ds.id WHERE d.generate_id = $gen_id ORDER BY d.id ASC");
     if($res_det) {
         while($r = $res_det->fetch_assoc()) {
             $key = $r['dosen_id'] . '_' . md5($r['mata_kuliah'].$r['prodi']);
             if(!isset($matrix_details[$key])) {
-                $matrix_details[$key] = ['dosen_id' => $r['dosen_id'], 'prodi' => $r['prodi'], 'mata_kuliah' => $r['mata_kuliah'], 'komponen' => []];
+                $matrix_details[$key] = [
+                    'dosen_id'        => $r['dosen_id'],
+                    'prodi'           => $r['prodi'],
+                    'mata_kuliah'     => $r['mata_kuliah'],
+                    'dosen_jabatan'   => $r['dosen_jabatan'] ?? '',
+                    'komponen'        => []
+                ];
             }
             $matrix_details[$key]['komponen'][$r['rincian_komponen_id']] = ['qty' => $r['qty'], 'tarif' => $r['tarif'], 'pajak' => $r['persen_pajak']];
         }
@@ -348,9 +354,13 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
     function syncProdi(selDosen, rowId) {
         const opt = selDosen.options[selDosen.selectedIndex];
+        // Isi kolom Prodi
         const pInp = document.querySelector(`#hr_${rowId} .inp-prodi`);
-        if (opt && opt.value && pInp) pInp.value = opt.dataset.prodi || '';
-        // Saat dosen berganti, update tarif jika ada is_jafung
+        if (pInp) pInp.value = (opt && opt.value) ? (opt.dataset.prodi || '') : '';
+        // FIX #2: Isi kolom Jabatan Fungsional otomatis dari data dosen
+        const jInp = document.querySelector(`#hr_${rowId} .inp-jabatan`);
+        if (jInp) jInp.value = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
+        // Update tarif per jabatan fungsional
         const jabatan = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
         updateJafungTarif(rowId, jabatan);
     }
@@ -515,20 +525,31 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tdDosen.appendChild(selDosen);
         tr1.appendChild(tdDosen);
 
-        // Kolom teks (prodi, mata kuliah, dll)
+        // Kolom teks (prodi, mata kuliah, jabatan, dll)
         teksCols.forEach(c => {
             let val = '';
             if (d) {
                 if (c.source === 'prodi')       val = d.prodi || '';
                 if (c.source === 'mata_kuliah') val = d.mata_kuliah || '';
+                // FIX #1 & #3: source='jabatan' diisi dari data dosen, bukan dari d (yang tidak menyimpan jabatan)
+                if (c.source === 'jabatan') {
+                    const dosenObj = dosenData.find(dd => String(dd.id) === String(d.dosen_id));
+                    val = d.dosen_jabatan || (dosenObj ? (dosenObj.jabatan_fungsional || '') : '');
+                }
             }
             const inp = document.createElement('input');
             inp.type  = 'text';
             inp.name  = `teks_${c.source}[]`;
             inp.value = val;
-            inp.className = 'inp-gen text-dark inp-teks-w' + (c.source === 'prodi' ? ' inp-prodi' : '');
+            // FIX #1: tambah class inp-jabatan agar syncProdi bisa menargetkan input ini
+            let extraClass = '';
+            if (c.source === 'prodi')   extraClass = ' inp-prodi';
+            if (c.source === 'jabatan') extraClass = ' inp-jabatan';
+            inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
+            // Jabatan & Prodi bersifat readonly (otomatis dari data dosen)
+            if (readOnly || c.source === 'jabatan') inp.readOnly = true;
             if (readOnly) inp.disabled = true;
-            if (c.source !== 'prodi') inp.required = true;
+            if (c.source !== 'prodi' && c.source !== 'jabatan') inp.required = true;
 
             const tdT = createCell('', { cls: 'align-middle', rowspan: rs });
             tdT.appendChild(inp);
