@@ -1,0 +1,120 @@
+/* =========================================================
+   SYIFA BOOTSTRAP BRIDGE (YARSI GREEN EDITION)
+   Memastikan Kontras Font Putih pada Latar Hijau!
+   ========================================================= */
+
+body {
+    font-size: 14px;
+    color: #334155;
+}
+
+.card {
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(15,23,42,.04);
+    transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card:hover {
+    box-shadow: 0 15px 35px rgba(16, 185, 129,.08);
+}
+
+.table {
+    --bs-table-bg: transparent;
+    font-size: 14px;
+}
+
+.table thead th {
+    font-weight: 700;
+    color: #475569;
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.form-control, .form-select {
+    border-radius: 10px;
+    border: 1.5px solid #e2e8f0;
+    padding: 10px 15px;
+    transition: .3s;
+    background-color: #f8fafc;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #10b981 !important; 
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, .15) !important; 
+    background-color: #fff;
+}
+
+/* ?? KONTRAST TEKS PUTIH MUTLAK PADA BACKGROUND HIJAU */
+.bg-primary, .bg-success, .btn-primary, .btn-success, .badge.bg-primary, .badge.bg-success {
+    color: #ffffff !important;
+}
+
+.btn {
+    border-radius: 10px;
+    font-weight: 600;
+    padding: 8px 18px;
+    transition: 0.3s;
+}
+
+/* Mengubah Primary (Biru) menjadi Emerald (Hijau Gelap) */
+.btn-primary {
+    background-color: #059669 !important; 
+    border-color: #059669 !important;
+}
+
+.btn-primary:hover {
+    background-color: #047857 !important;
+    border-color: #047857 !important;
+    box-shadow: 0 8px 15px rgba(5, 150, 105, 0.3) !important;
+    transform: translateY(-2px);
+}
+
+.btn-outline-primary {
+    color: #059669 !important;
+    border-color: #059669 !important;
+}
+
+.btn-outline-primary:hover {
+    background-color: #059669 !important;
+    color: #fff !important;
+    box-shadow: 0 8px 15px rgba(5, 150, 105, 0.3) !important;
+}
+
+.text-primary { color: #059669 !important; }
+.bg-primary { background-color: #059669 !important; }
+.border-primary { border-color: #059669 !important; }
+
+/* TABS KONTRAST (Jika aktif, latar hijau teks putih) */
+.nav-pills .nav-link.active {
+    background-color: #059669 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);
+}
+
+.page-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 20px;
+}
+
+.main-content .container-fluid {
+    padding: 30px;
+}
+
+.badge {
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 700;
+}
+
+.modal-content {
+    border-radius: 20px;
+    border: none;
+    box-shadow: 0 25px 50px rgba(0,0,0,.15);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #10b981; }

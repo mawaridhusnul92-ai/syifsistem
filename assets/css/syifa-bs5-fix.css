@@ -1,0 +1,112 @@
+/*
+ * syifa-bs5-fix.css - AGGRESSIVE ENTERPRISE SCALER
+ * Versi: 4.0 (Absolute Override Edition)
+ * Menjinakkan seluruh elemen raksasa bawaan Bootstrap 5 menjadi 
+ * tampilan Desktop Enterprise yang padat, luas, dan rapi di Zoom 100%.
+ */
+
+/* ========================================================================
+   🚀 1. ROOT & TYPOGRAPHY OVERRIDE (MEMAKSA FONT MENGECIL)
+   ======================================================================== */
+:root {
+    --bs-body-font-size: 13px !important;
+    --bs-body-line-height: 1.4 !important;
+}
+
+html, body {
+    font-size: 13px !important;
+    background-color: #f8fafc;
+    color: #334155;
+}
+
+/* Mengecilkan Semua Heading (Judul) */
+h1, .h1 { font-size: 22px !important; }
+h2, .h2 { font-size: 20px !important; }
+h3, .h3 { font-size: 18px !important; }
+h4, .h4 { font-size: 16px !important; }
+h5, .h5 { font-size: 14px !important; font-weight: 700 !important; }
+h6, .h6 { font-size: 12.5px !important; font-weight: 700 !important; }
+
+/* ========================================================================
+   🚀 2. TABLE DENSE MODE (MERAPIKAN TABEL YANG KEBESARAN)
+   ======================================================================== */
+.table td, .table th {
+    padding: 0.6rem 0.75rem !important; /* Memangkas jarak kosong di dalam sel tabel */
+    font-size: 12px !important;         /* Teks tabel lebih kecil & rapi */
+    vertical-align: middle !important;
+}
+
+.table thead th {
+    font-size: 10.5px !important;
+    letter-spacing: 0.5px;
+    padding-top: 0.8rem !important;
+    padding-bottom: 0.8rem !important;
+}
+
+.table-responsive {
+    border-radius: 12px !important;
+    border: 1px solid #e2e8f0;
+}
+
+/* ========================================================================
+   🚀 3. COMPACT COMPONENTS (TOMBOL, INPUT, BADGE)
+   ======================================================================== */
+.form-control, .form-select {
+    font-size: 13px !important;
+    padding: 0.4rem 0.8rem !important;
+    min-height: 34px !important;
+}
+
+.btn {
+    font-size: 12.5px !important;
+    padding: 0.4rem 1rem !important;
+    font-weight: 600 !important;
+}
+
+.btn-sm, .btn-xs {
+    font-size: 11px !important;
+    padding: 0.25rem 0.6rem !important;
+}
+
+.badge {
+    padding: 0.4em 0.7em !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+}
+
+/* ========================================================================
+   🚀 4. SPACING TAMER (MEMANGKAS MARGIN & PADDING RAKSASA)
+   ======================================================================== */
+/* Menjinakkan Padding dalam Kartu */
+.p-4, .card-body.p-4 { padding: 1.25rem !important; }
+.px-4 { padding-left: 1.25rem !important; padding-right: 1.25rem !important; }
+.py-4 { padding-top: 1.25rem !important; padding-bottom: 1.25rem !important; }
+
+.p-5 { padding: 1.5rem !important; }
+.px-5 { padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+.py-5 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+
+/* Menjinakkan Jarak Antar Kartu */
+.mb-4 { margin-bottom: 1.25rem !important; }
+.mb-5 { margin-bottom: 1.5rem !important; }
+.mt-4 { margin-top: 1.25rem !important; }
+
+/* Menjinakkan Grid Gap (Jarak antar kolom di Row) */
+.g-4, .gy-4, .gx-4 {
+    --bs-gutter-y: 1.25rem !important;
+    --bs-gutter-x: 1.25rem !important;
+}
+
+.card {
+    border-radius: 14px !important;
+}
+
+/* ========================================================================
+   🚀 5. UTILITIES & SCROLLBAR
+   ======================================================================== */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+.small, small { font-size: 11px !important; }

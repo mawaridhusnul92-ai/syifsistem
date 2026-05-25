@@ -1,0 +1,18 @@
+/* * bootstrap5_override.css
+ * Global UI/UX Enhancement - Modern Minimalist
+ * Tidak mengubah layout, hanya memperhalus komponen visual.
+ */
+
+.card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+}
+
+.table {
+    font-size: 14px;
+}
+
+.btn {
+    border-radius: 8px;
+}

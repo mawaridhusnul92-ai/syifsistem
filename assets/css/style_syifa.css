@@ -1,0 +1,47 @@
+/* --- UI SYSTEM SYIFA ERP (YARSI GREEN EMERALD EDITION) --- */
+:root {
+    --sidebar-width: 275px;
+    --header-height: 75px;
+    --body-bg: #f8fafc;
+}
+
+body {
+    background-color: var(--body-bg);
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+.main-content {
+    margin-left: var(--sidebar-width);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 100vh;
+}
+
+.top-navbar {
+    background: #fff;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    padding: 0 30px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+}
+
+.btn-toggle-sidebar {
+    border: none;
+    background: #f1f5f9;
+    font-size: 1.2rem;
+    color: #059669;
+    cursor: pointer;
+    margin-right: 20px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: 0.3s;
+}
+.btn-toggle-sidebar:hover { background-color: #ecfdf5; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2); }
+
+.cursor-pointer { cursor: pointer; }
+.card { border: none; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03); transition: 0.3s; }
