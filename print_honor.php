@@ -202,13 +202,14 @@ if (empty($signatures)) {
                         $vItems = $vert_group_info['items'];
                         $vCount = count($vItems);
                         $rs = $vCount > 0 ? $vCount : 1;
+                        $has_vert = $vCount > 0;
 
                         for ($vi = 0; $vi < $rs; $vi++) {
                             echo "<tr>";
                             
                             // CETAK BARIS PERTAMA (Teks & Horizontal Cols)
                             if ($vi === 0) {
-                                echo "<td class='text-center' rowspan='$rs'>" . $n++ . "</td>";
+                                echo "<td class='text-center' rowspan='".($has_vert ? ($rs + 1) : $rs)."'>" . $n++ . "</td>";
                                 
                                 foreach ($teks_cols as $t) {
                                     // FIX: map source ke field yang benar di matrix $i
@@ -218,7 +219,7 @@ if (empty($signatures)) {
                                     elseif ($src === 'dosen_nama')  $val = htmlspecialchars($i['dosen_nama'] ?? '-');
                                     elseif ($src === 'jabatan')     $val = htmlspecialchars($i['jabatan'] ?? '-');
                                     else $val = htmlspecialchars($i[$src] ?? '-');
-                                    echo "<td rowspan='$rs' class='text-center'>$val</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center'>$val</td>";
                                 }
                                 
                                 foreach ($horiz_groups as $gName => $h_items) {
@@ -229,9 +230,9 @@ if (empty($signatures)) {
                                         if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid];
                                         $jml = $q * $trf; 
                                         
-                                        echo "<td rowspan='$rs' class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
-                                        echo "<td rowspan='$rs' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
-                                        echo "<td rowspan='$rs' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
                                     }
                                 }
                             }
@@ -249,19 +250,46 @@ if (empty($signatures)) {
                                 echo "<td class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
                                 echo "<td class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
                                 echo "<td class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+
+                                // Untuk layout vertikal: tampilkan bruto, pajak, netto per baris uraian
+                                if ($has_vert) {
+                                    $pajak_pct_row = (float)($i['pajak_pct'] ?? $i['persen_pajak'] ?? 0);
+                                    $item_bruto = $jml;
+                                    $item_pajak = round($item_bruto * $pajak_pct_row / 100);
+                                    $item_netto = $item_bruto - $item_pajak;
+                                    echo "<td class='text-end fw-bold'>".($item_bruto>0?number_format($item_bruto,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-center text-danger fw-bold'>".($item_pajak>0?'Rp '.number_format($item_pajak,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".($item_netto>0?number_format($item_netto,0,',','.'):'-')."</td>";
+                                }
                             } else if ($vCount === 0) {
                                 // tidak ada grup vertikal — skip
                             } else {
                                 echo "<td></td><td></td><td></td><td></td>";
+                                if ($has_vert) {
+                                    echo "<td></td><td></td><td></td>";
+                                }
                             }
 
-                            // CETAK TOTAL (Bruto, Pajak, Netto) SETELAH VERTIKAL GROUP
-                            if ($vi === 0) {
+                            // CETAK TOTAL (Bruto, Pajak, Netto) — hanya untuk layout NON-vertikal
+                            if (!$has_vert && $vi === 0) {
                                 echo "<td rowspan='$rs' class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
                                 echo "<td rowspan='$rs' class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
                                 echo "<td rowspan='$rs' class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
                             }
                             
+                            echo "</tr>";
+                        }
+
+                        // Untuk layout vertikal: tambahkan baris TOTAL di bawah semua item vertikal
+                        if ($has_vert) {
+                            echo "<tr style='background-color: #e3f2fd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>";
+                            echo "<td class='fw-bold text-center'>TOTAL</td>";
+                            echo "<td class='text-center fw-bold'>-</td>";
+                            echo "<td class='text-end fw-bold'>-</td>";
+                            echo "<td class='text-end fw-bold'>-</td>";
+                            echo "<td class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
+                            echo "<td class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
+                            echo "<td class='text-end fw-bold' style='background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
                             echo "</tr>";
                         }
                     endforeach; ?>

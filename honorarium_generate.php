@@ -357,12 +357,15 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         // Isi kolom Prodi
         const pInp = document.querySelector(`#hr_${rowId} .inp-prodi`);
         if (pInp) pInp.value = (opt && opt.value) ? (opt.dataset.prodi || '') : '';
-        // FIX #2: Isi kolom Jabatan Fungsional otomatis dari data dosen
-        const jInp = document.querySelector(`#hr_${rowId} .inp-jabatan`);
-        if (jInp) jInp.value = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
-        // Update tarif per jabatan fungsional
+        // FIX: Isi dropdown Jabatan Fungsional otomatis dari data dosen
+        const jSel = document.querySelector(`#hr_${rowId} .inp-jabatan`);
         const jabatan = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
+        if (jSel) {
+            jSel.value = jabatan;
+        }
+        // Update tarif per jabatan fungsional & filter komponen
         updateJafungTarif(rowId, jabatan);
+        filterKomponenByJabatan(rowId, jabatan);
     }
 
     /**
@@ -452,6 +455,80 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         calcRow(rowId);
     }
 
+    /**
+     * filterKomponenByJabatan — Menyembunyikan/menampilkan komponen honor
+     * berdasarkan jabatan fungsional yang dipilih.
+     * Komponen yang is_jafung=true dan memiliki jabatan_fungsional berbeda
+     * dari jabatan yang dipilih akan di-hide (qty di-set 0 & visual hidden).
+     * Hanya komponen yang sesuai jabatan yang ditampilkan.
+     */
+    function filterKomponenByJabatan(rowId, jabatan) {
+        const tbody = document.getElementById(`hr_${rowId}`);
+        if (!tbody) return;
+
+        // Kumpulkan semua item komponen yang is_jafung dari horizGroups dan vertGroup
+        const allItems = [...Object.values(horizGroups).flat(), ...(vertGroup.items || [])];
+
+        allItems.forEach(c => {
+            const rid   = String(c.id_rincian);
+            const mData = masterTarif[rid] || null;
+            if (!mData) return;
+
+            const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
+            if (!isJafung) return; // Non-jafung selalu tampil
+
+            const kompId = String(mData.komp_id);
+
+            // Cek apakah rincian ini cocok dengan jabatan yang dipilih
+            let shouldShow = true;
+            if (jabatan && jafungTarif[kompId]) {
+                // Jika komponen ini punya mapping per jabatan, cek kecocokan
+                const jabatanRincian = mData.jabatan_fungsional || '';
+                if (jabatanRincian && jabatanRincian !== jabatan) {
+                    shouldShow = false;
+                }
+            }
+
+            // Cari semua td yang terkait rid ini (bisa jadi sudah berubah ridnya via updateJafungTarif)
+            // Kita cari berdasarkan rid asli terlebih dahulu
+            let tdQty  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
+            let tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
+            let tdJml  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
+
+            // Untuk vertical items, cari juga row label-nya
+            const vertItems = vertGroup.items || [];
+            const isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
+
+            if (shouldShow) {
+                if (tdQty)   tdQty.style.display = '';
+                if (tdTarif) tdTarif.style.display = '';
+                if (tdJml)   tdJml.style.display = '';
+                // Untuk vertikal, tampilkan juga tr-nya
+                if (isVertItem && tdQty) {
+                    const tr = tdQty.closest('tr');
+                    if (tr) tr.style.display = '';
+                }
+            } else {
+                if (tdQty) {
+                    tdQty.style.display = 'none';
+                    // Set qty ke 0 agar tidak dihitung
+                    const qtyInp = tdQty.querySelector('input[type="number"]');
+                    if (qtyInp) qtyInp.value = 0;
+                }
+                if (tdTarif) tdTarif.style.display = 'none';
+                if (tdJml)   tdJml.style.display = 'none';
+                // Untuk vertikal, sembunyikan juga tr-nya
+                if (isVertItem && tdQty) {
+                    const tr = tdQty.closest('tr');
+                    if (tr) tr.style.display = 'none';
+                }
+            }
+        });
+
+        // Recalculate setelah filter
+        calcRow(rowId);
+    }
+
     // ================================================================
     //  createCell — Buat satu <td> dengan innerHTML aman
     // ================================================================
@@ -531,39 +608,63 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             if (d) {
                 if (c.source === 'prodi')       val = d.prodi || '';
                 if (c.source === 'mata_kuliah') val = d.mata_kuliah || '';
-                // FIX #1 & #3: source='jabatan' diisi dari data dosen, bukan dari d (yang tidak menyimpan jabatan)
                 if (c.source === 'jabatan') {
                     const dosenObj = dosenData.find(dd => String(dd.id) === String(d.dosen_id));
                     val = d.dosen_jabatan || (dosenObj ? (dosenObj.jabatan_fungsional || '') : '');
                 }
             }
-            const inp = document.createElement('input');
-            inp.type  = 'text';
-            inp.name  = `teks_${c.source}[]`;
-            inp.value = val;
-            // FIX #1: tambah class inp-jabatan agar syncProdi bisa menargetkan input ini
-            let extraClass = '';
-            if (c.source === 'prodi')   extraClass = ' inp-prodi';
-            if (c.source === 'jabatan') extraClass = ' inp-jabatan';
-            inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
-            // Jabatan & Prodi bersifat readonly (otomatis dari data dosen)
-            if (readOnly || c.source === 'jabatan') inp.readOnly = true;
-            if (readOnly) inp.disabled = true;
-            if (c.source !== 'prodi' && c.source !== 'jabatan') inp.required = true;
 
             const tdT = createCell('', { cls: 'align-middle', rowspan: rs });
-            tdT.appendChild(inp);
 
-            // Datalist untuk prodi
-            if (c.source === 'prodi') {
-                const dl = document.createElement('datalist');
-                dl.id = `dlProdi_${id}`;
-                prodiList.forEach(p => {
-                    const op = document.createElement('option'); op.value = p; dl.appendChild(op);
+            // FIX: Jabatan Fungsional menggunakan dropdown <select> bukan input teks
+            if (c.source === 'jabatan') {
+                const selJabatan = document.createElement('select');
+                selJabatan.name      = `teks_${c.source}[]`;
+                selJabatan.className = 'inp-gen text-dark inp-teks-w inp-jabatan';
+                if (readOnly) selJabatan.disabled = true;
+
+                const jabatanOptions = ['', 'Tenaga Pengajar', 'Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Profesor'];
+                jabatanOptions.forEach(jOpt => {
+                    const opt = document.createElement('option');
+                    opt.value = jOpt;
+                    opt.text  = jOpt === '' ? '-- Pilih Jabatan --' : jOpt;
+                    if (jOpt === val) opt.selected = true;
+                    selJabatan.appendChild(opt);
                 });
-                inp.setAttribute('list', `dlProdi_${id}`);
-                tdT.appendChild(dl);
+
+                // Saat user mengubah jabatan fungsional, update tarif & filter komponen
+                selJabatan.onchange = function() {
+                    updateJafungTarif(id, this.value);
+                    filterKomponenByJabatan(id, this.value);
+                };
+
+                tdT.appendChild(selJabatan);
+            } else {
+                const inp = document.createElement('input');
+                inp.type  = 'text';
+                inp.name  = `teks_${c.source}[]`;
+                inp.value = val;
+                let extraClass = '';
+                if (c.source === 'prodi') extraClass = ' inp-prodi';
+                inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
+                if (readOnly || c.source === 'prodi') inp.readOnly = true;
+                if (readOnly) inp.disabled = true;
+                if (c.source !== 'prodi') inp.required = true;
+
+                // Datalist untuk prodi
+                if (c.source === 'prodi') {
+                    const dl = document.createElement('datalist');
+                    dl.id = `dlProdi_${id}`;
+                    prodiList.forEach(p => {
+                        const op = document.createElement('option'); op.value = p; dl.appendChild(op);
+                    });
+                    inp.setAttribute('list', `dlProdi_${id}`);
+                    tdT.appendChild(dl);
+                }
+
+                tdT.appendChild(inp);
             }
+
             tr1.appendChild(tdT);
         });
 
@@ -847,13 +948,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         if (matrixDetails.length > 0) {
             matrixDetails.forEach(d => {
                 addHonorMatrixRow(d);
-                // BUG FIX #1: capture rCount SEKARANG (sebelum forEach iterasi berikutnya)
-                // agar setiap setTimeout mendapat rowId yang tepat, bukan nilai rCount terakhir.
                 const capturedRowId = rCount;
                 setTimeout(() => {
                     const dosenObj = dosenData.find(dd => String(dd.id) === String(d.dosen_id));
                     if (dosenObj && dosenObj.jabatan_fungsional) {
                         updateJafungTarif(capturedRowId, dosenObj.jabatan_fungsional);
+                        filterKomponenByJabatan(capturedRowId, dosenObj.jabatan_fungsional);
                     }
                 }, 50);
             });
