@@ -188,12 +188,21 @@ function buildTableHeader($teks_cols, $horiz_groups, $vert_info) {
     }
     
     foreach ($horiz_groups as $gName => $items) {
-        $cs = count($items) * 3;
+        $firstItem = $items[0] ?? null;
+        $gSingleCol = !empty($firstItem['single_jafung_col']);
         $need_row2 = true;
-        $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
-        foreach ($items as $it) {
-            $lbl = strtoupper($it['label']);
-            $row2 .= "<th class='th-sub'>$lbl</th><th class='th-sub'>Rp / Satuan</th><th class='th-sub'>JUMLAH</th>";
+        
+        if ($gSingleCol) {
+            // Mode 1 kolom: hanya 3 sub-kolom (QTY | TARIF | JUMLAH)
+            $row1 .= "<th colspan='3' class='th-grup'>".strtoupper($gName)."</th>";
+            $row2 .= "<th class='th-sub'>QTY</th><th class='th-sub'>TARIF</th><th class='th-sub'>JUMLAH</th>";
+        } else {
+            $cs = count($items) * 3;
+            $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
+            foreach ($items as $it) {
+                $lbl = strtoupper($it['label']);
+                $row2 .= "<th class='th-sub'>$lbl</th><th class='th-sub'>Rp / Satuan</th><th class='th-sub'>JUMLAH</th>";
+            }
         }
     }
     
@@ -345,7 +354,11 @@ foreach ($slips as $did => $dosen_data):
         // Hitung Colspan untuk Footer (Subtotal) — TANPA kolom No
         $col_count = 0;
         $col_count += count($teks_cols);
-        foreach ($horiz_groups as $gName => $items) $col_count += (count($items) * 3);
+        foreach ($horiz_groups as $gName => $items) {
+            $firstItem = $items[0] ?? null;
+            $gSingleCol = !empty($firstItem['single_jafung_col']);
+            $col_count += $gSingleCol ? 3 : (count($items) * 3);
+        }
         if (!empty($vert_info['items'])) $col_count += 4; // label + qty + tarif + jml
         
         [$thead1, $thead2] = buildTableHeader($teks_cols, $horiz_groups, $vert_info);
@@ -400,16 +413,37 @@ foreach ($slips as $did => $dosen_data):
                             
                             // Kolom Horizontal
                             foreach ($horiz_groups as $gName => $items) {
-                                foreach ($items as $it) {
-                                    $rid  = (int)$it['id_rincian'];
-                                    $k    = $row_data['komponen'][$rid] ?? null;
-                                    $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
-                                    $qty  = $k ? $k['qty'] : 0;
-                                    $jml  = $qty * $tarif;
+                                $firstItem = $items[0] ?? null;
+                                $gSingleCol = !empty($firstItem['single_jafung_col']);
+                                
+                                if ($gSingleCol) {
+                                    // Mode 1 Kolom: cari data komponen yang ada (hanya 1 yang punya qty > 0)
+                                    $found_qty = 0; $found_tarif = 0; $found_jml = 0;
+                                    foreach ($items as $it) {
+                                        $rid = (int)$it['id_rincian'];
+                                        $k   = $row_data['komponen'][$rid] ?? null;
+                                        if ($k && (float)$k['qty'] > 0) {
+                                            $found_qty   = (float)$k['qty'];
+                                            $found_tarif = (float)$k['tarif'];
+                                            $found_jml   = $found_qty * $found_tarif;
+                                            break;
+                                        }
+                                    }
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($found_qty > 0 ? rp($found_qty) : '-')."</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($found_tarif > 0 ? rp($found_tarif) : '-')."</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>".($found_jml > 0 ? rp($found_jml) : '-')."</td>";
+                                } else {
+                                    foreach ($items as $it) {
+                                        $rid  = (int)$it['id_rincian'];
+                                        $k    = $row_data['komponen'][$rid] ?? null;
+                                        $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
+                                        $qty  = $k ? $k['qty'] : 0;
+                                        $jml  = $qty * $tarif;
 
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
+                                    }
                                 }
                             }
                         }

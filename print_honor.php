@@ -93,9 +93,18 @@ $col_count = 1;
 foreach ($teks_cols as $t) { $th_row1 .= "<th rowspan='2'>".strtoupper($t['label'])."</th>"; $col_count++; }
 
 foreach ($horiz_groups as $gName => $items) {
-    $cs = count($items) * 3;
-    $th_row1 .= "<th colspan='$cs' style='background-color:#ffc107 !important; color:#000;'>".strtoupper($gName)."</th>";
-    foreach($items as $it) { $th_row2 .= "<th>".strtoupper($it['label'])."</th><th>TARIF</th><th>JUMLAH</th>"; $col_count += 3; }
+    $firstItem = $items[0] ?? null;
+    $gSingleCol = !empty($firstItem['single_jafung_col']);
+    
+    if ($gSingleCol) {
+        $th_row1 .= "<th colspan='3' style='background-color:#ffc107 !important; color:#000;'>".strtoupper($gName)."</th>";
+        $th_row2 .= "<th>QTY</th><th>TARIF</th><th>JUMLAH</th>";
+        $col_count += 3;
+    } else {
+        $cs = count($items) * 3;
+        $th_row1 .= "<th colspan='$cs' style='background-color:#ffc107 !important; color:#000;'>".strtoupper($gName)."</th>";
+        foreach($items as $it) { $th_row2 .= "<th>".strtoupper($it['label'])."</th><th>TARIF</th><th>JUMLAH</th>"; $col_count += 3; }
+    }
 }
 
 if (count($vert_group_info['items']) > 0) {
@@ -223,16 +232,37 @@ if (empty($signatures)) {
                                 }
                                 
                                 foreach ($horiz_groups as $gName => $h_items) {
-                                    foreach($h_items as $h) {
-                                        $rid = $h['id_rincian'];
-                                        $q = $i['komponen'][$rid]['qty'] ?? 0;
-                                        $trf = $i['komponen'][$rid]['tarif'] ?? 0;
-                                        if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid];
-                                        $jml = $q * $trf; 
-                                        
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                    $firstItem = $h_items[0] ?? null;
+                                    $gSingleCol = !empty($firstItem['single_jafung_col']);
+                                    
+                                    if ($gSingleCol) {
+                                        // Mode 1 Kolom: cari data komponen yang ada (hanya 1 yang punya qty > 0)
+                                        $found_q = 0; $found_trf = 0; $found_jml = 0;
+                                        foreach ($h_items as $h) {
+                                            $rid = $h['id_rincian'];
+                                            $q_check = $i['komponen'][$rid]['qty'] ?? 0;
+                                            if ($q_check > 0) {
+                                                $found_q = $q_check;
+                                                $found_trf = $i['komponen'][$rid]['tarif'] ?? 0;
+                                                $found_jml = $found_q * $found_trf;
+                                                break;
+                                            }
+                                        }
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>".($found_q>0?$found_q:'-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end'>".($found_trf>0?number_format($found_trf,0,',','.'):'-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end fw-bold'>".($found_jml>0?number_format($found_jml,0,',','.'):'-')."</td>";
+                                    } else {
+                                        foreach($h_items as $h) {
+                                            $rid = $h['id_rincian'];
+                                            $q = $i['komponen'][$rid]['qty'] ?? 0;
+                                            $trf = $i['komponen'][$rid]['tarif'] ?? 0;
+                                            if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid];
+                                            $jml = $q * $trf; 
+                                            
+                                            echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
+                                            echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
+                                            echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                        }
                                     }
                                 }
                             }

@@ -407,6 +407,23 @@ function renderPreviewTable($layout_json) {
     function toggleJafungLabel(chk) {
         chk.nextElementSibling.innerText = chk.checked ? 'On' : 'Off';
         chk.nextElementSibling.className = chk.checked ? 'small fw-bold text-warning' : 'small fw-bold text-muted';
+        // Show/hide single column option
+        let block = chk.closest('.b-row');
+        if (block) {
+            let singleColContainer = block.querySelector('.b-single-col-container');
+            if (singleColContainer) {
+                singleColContainer.style.display = chk.checked ? 'flex' : 'none';
+                if (!chk.checked) {
+                    let singleChk = singleColContainer.querySelector('.b-single-jafung-col');
+                    if (singleChk) { singleChk.checked = false; toggleSingleColLabel(singleChk); }
+                }
+            }
+        }
+    }
+
+    function toggleSingleColLabel(chk) {
+        chk.nextElementSibling.innerText = chk.checked ? 'On' : 'Off';
+        chk.nextElementSibling.className = chk.checked ? 'small fw-bold text-info' : 'small fw-bold text-muted';
     }
 </script>
 
@@ -445,6 +462,11 @@ function renderPreviewTable($layout_json) {
             let jafungChecked = gJafung ? 'checked' : '';
             let jafungLbl     = gJafung ? 'On' : 'Off';
             let jafungColor   = gJafung ? 'text-warning' : 'text-muted';
+            let gSingleCol = data ? (data.single_jafung_col || false) : false;
+            let singleColChecked = gSingleCol ? 'checked' : '';
+            let singleColLbl     = gSingleCol ? 'On' : 'Off';
+            let singleColColor   = gSingleCol ? 'text-info' : 'text-muted';
+            let singleColDisplay = gJafung ? 'flex' : 'none';
             let headerInputHtml = `
             <div class="col-md-6">
                 <div class="d-flex align-items-center mb-2">
@@ -469,6 +491,18 @@ function renderPreviewTable($layout_json) {
                     <div class="form-check form-switch m-0 d-flex align-items-center ms-auto flex-shrink-0">
                         <input class="form-check-input cursor-pointer shadow-sm me-2 b-is-jafung" type="checkbox" onchange="toggleJafungLabel(this)" ${jafungChecked} style="transform:scale(1.3);">
                         <span class="small fw-bold ${jafungColor}">${jafungLbl}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-12 b-single-col-container" style="display:${singleColDisplay};">
+                <div class="p-2 border rounded-3 bg-warning bg-opacity-10 d-flex align-items-center gap-3 w-100 mt-2">
+                    <div>
+                        <div class="small fw-bold text-dark"><i class="fas fa-compress-arrows-alt me-1 text-info"></i>Gabung 1 Kolom (Tidak Pecah Per Jabatan)?</div>
+                        <div class="small text-muted">Jika On, hanya tampil 1 set kolom QTY | TARIF | JUMLAH. Tarif otomatis menyesuaikan jabatan dosen.</div>
+                    </div>
+                    <div class="form-check form-switch m-0 d-flex align-items-center ms-auto flex-shrink-0">
+                        <input class="form-check-input cursor-pointer shadow-sm me-2 b-single-jafung-col" type="checkbox" onchange="toggleSingleColLabel(this)" ${singleColChecked} style="transform:scale(1.3);">
+                        <span class="small fw-bold ${singleColColor}">${singleColLbl}</span>
                     </div>
                 </div>
             </div>`;
@@ -539,11 +573,11 @@ function renderPreviewTable($layout_json) {
         layout.forEach(l => {
             if (l.type === 'teks') { standaloneTeks.push(l); }
             else if (l.group_type === 'group_vertical') {
-                if(!groups.vert[l.group]) groups.vert[l.group] = {name: l.group, header: (l.group_header !== undefined ? l.group_header : 'URAIAN'), is_jafung: (l.is_jafung||false), items: []};
+                if(!groups.vert[l.group]) groups.vert[l.group] = {name: l.group, header: (l.group_header !== undefined ? l.group_header : 'URAIAN'), is_jafung: (l.is_jafung||false), single_jafung_col: (l.single_jafung_col||false), items: []};
                 groups.vert[l.group].items.push(l);
             } else {
                 let g = l.group || 'KOMPONEN DEFAULT';
-                if(!groups.horiz[g]) groups.horiz[g] = {name: g, header: (l.group_header||''), is_jafung: (l.is_jafung||false), items: []};
+                if(!groups.horiz[g]) groups.horiz[g] = {name: g, header: (l.group_header||''), is_jafung: (l.is_jafung||false), single_jafung_col: (l.single_jafung_col||false), items: []};
                 groups.horiz[g].items.push(l);
             }
         });
@@ -569,8 +603,11 @@ function renderPreviewTable($layout_json) {
                 if (ghContainer && ghContainer.style.display !== 'none' && ghInput) groupHeader = ghInput.value;
                 let jafungChk = block.querySelector('.b-is-jafung');
                 if (jafungChk && jafungChk.checked) isJafung = true;
+                let singleJafungCol = false;
+                let singleColChk = block.querySelector('.b-single-jafung-col');
+                if (singleColChk && singleColChk.checked) singleJafungCol = true;
                 block.querySelectorAll('.b-item').forEach(item => {
-                    layoutData.push({ type: 'komponen', label: item.querySelector('.b-label').value, id_rincian: item.querySelector('.b-rincian').value, group: groupName, group_type: type, group_header: groupHeader, is_jafung: isJafung });
+                    layoutData.push({ type: 'komponen', label: item.querySelector('.b-label').value, id_rincian: item.querySelector('.b-rincian').value, group: groupName, group_type: type, group_header: groupHeader, is_jafung: isJafung, single_jafung_col: singleJafungCol });
                 });
             }
         });
