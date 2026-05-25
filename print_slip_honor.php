@@ -365,18 +365,29 @@ foreach ($slips as $did => $dosen_data):
             <tbody>
                 <?php
                 $vItems = $vert_info['items'] ?? [];
-                $rs     = max(count($vItems), 1);
+                $has_vert = count($vItems) > 0;
                 
                 // Looping Per Baris Item (Berdasarkan Mata Kuliah/Prodi)
                 foreach ($gen['rows'] as $r_idx => $row_data) {
+                    
+                    // Untuk layout vertikal: hitung hanya item yang benar-benar punya data (qty > 0)
+                    $active_vItems = [];
+                    if ($has_vert) {
+                        foreach ($vItems as $v) {
+                            $vrid = (int)$v['id_rincian'];
+                            $vk   = $row_data['komponen'][$vrid] ?? null;
+                            if ($vk && (float)$vk['qty'] > 0) {
+                                $active_vItems[] = $v;
+                            }
+                        }
+                    }
+                    $rs = $has_vert ? max(count($active_vItems), 1) : 1;
                     
                     for ($vi = 0; $vi < $rs; $vi++) {
                         echo "<tr class='data-row" . ($vi > 0 ? ' vert-extra' : '') . "'>";
                         
                         // Render Kolom Teks dan Horizontal di baris PERTAMA (vi == 0)
                         if ($vi === 0) {
-                            // TIDAK ADA kolom NO — ikuti layout form sepenuhnya
-                            
                             // Kolom Teks
                             foreach ($teks_cols as $t) {
                                 $val = '';
@@ -384,7 +395,7 @@ foreach ($slips as $did => $dosen_data):
                                 if ($t['source'] === 'mata_kuliah') $val = htmlspecialchars($row_data['mata_kuliah']);
                                 if ($t['source'] === 'dosen_nama')  $val = htmlspecialchars($row_data['dosen_nama']);
                                 if ($t['source'] === 'jabatan')     $val = htmlspecialchars($row_data['jabatan']);
-                                echo "<td rowspan='$rs' class='td-teks fw-bold'>$val</td>";
+                                echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-teks fw-bold'>$val</td>";
                             }
                             
                             // Kolom Horizontal
@@ -396,42 +407,66 @@ foreach ($slips as $did => $dosen_data):
                                     $qty  = $k ? $k['qty'] : 0;
                                     $jml  = $qty * $tarif;
 
-                                    echo "<td rowspan='$rs' class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
-                                    echo "<td rowspan='$rs' class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
-                                    echo "<td rowspan='$rs' class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
                                 }
                             }
                         }
                         
-                        // Render Kolom Vertikal (Berubah di setiap $vi)
-                        if (!empty($vItems) && isset($vItems[$vi])) {
-                            $v    = $vItems[$vi];
+                        // Render Kolom Vertikal (Hanya item dengan data)
+                        if ($has_vert && isset($active_vItems[$vi])) {
+                            $v    = $active_vItems[$vi];
                             $rid  = (int)$v['id_rincian'];
                             $k    = $row_data['komponen'][$rid] ?? null;
                             $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
                             $qty  = $k ? $k['qty'] : 0;
                             $jml  = $qty * $tarif;
                             
-                            // Jika user mematikan group_header (menjadi string kosong), maka kita render kolom label kosong jika index 0,
-                            // tapi desain ini mengharuskan kita mencetak Label. Jadi label selalu dicetak.
                             echo "<td class='td-vert-label'>".htmlspecialchars($v['label'])."</td>";
                             echo "<td class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
                             echo "<td class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
                             echo "<td class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
-                        } else if (empty($vItems)) {
+
+                            // Untuk layout vertikal: tampilkan bruto, pajak, netto per baris uraian
+                            $row_pajak_pct = (float)$row_data['pajak_pct'];
+                            $item_bruto    = $jml;
+                            $item_pajak    = round($item_bruto * $row_pajak_pct / 100);
+                            $item_netto    = $item_bruto - $item_pajak;
+                            echo "<td class='td-num td-bruto text-dark'>".($item_bruto > 0 ? rp($item_bruto) : '-')."</td>";
+                            echo "<td class='td-num text-danger fw-bold'>".($item_pajak > 0 ? rp($item_pajak) : '-')."</td>";
+                            echo "<td class='td-num fw-bold' style='background: #ccffcc !important;'>".($item_netto > 0 ? rp($item_netto) : '-')."</td>";
+                        } else if (!$has_vert) {
                             // Kosong jika tidak ada grup vertikal sama sekali
                         } else {
                              // Filler jika kolom vertikal habis
                              echo "<td></td><td></td><td></td><td></td>";
+                             echo "<td></td><td></td><td></td>";
                         }
                         
-                        // 🚀 PERBAIKAN URUTAN: Render Total Bruto, Pajak, Netto di baris PERTAMA (vi == 0), SETELAH vertical items
-                        if ($vi === 0) {
+                        // Untuk layout NON-vertikal: render Total Bruto, Pajak, Netto di baris pertama (merge)
+                        if (!$has_vert && $vi === 0) {
                             echo "<td rowspan='$rs' class='td-num td-bruto text-dark'>".rp($row_data['row_bruto'])."</td>";
                             echo "<td rowspan='$rs' class='td-num text-danger fw-bold'>".rp($row_data['row_pajak'])."</td>";
                             echo "<td rowspan='$rs' class='td-num fw-bold' style='background: #ccffcc !important;'>".rp($row_data['row_netto'])."</td>";
                         }
                         
+                        echo "</tr>";
+                    }
+
+                    // Untuk layout vertikal: tambahkan baris TOTAL di bawah semua item vertikal
+                    if ($has_vert) {
+                        echo "<tr class='data-row' style='background:#e3f2fd !important;'>";
+                        // Kolom uraian label = TOTAL
+                        echo "<td class='td-vert-label fw-bold text-primary' style='text-align:center;'>TOTAL</td>";
+                        // Kosongkan kolom qty, tarif, jml vertikal
+                        echo "<td class='td-num fw-bold'>-</td>";
+                        echo "<td class='td-num fw-bold'>-</td>";
+                        echo "<td class='td-num fw-bold'>-</td>";
+                        // Total bruto, pajak, netto (dijumlahkan)
+                        echo "<td class='td-num td-bruto text-dark fw-bold' style='background:#e3f2fd !important;'>".rp($row_data['row_bruto'])."</td>";
+                        echo "<td class='td-num text-danger fw-bold'>".rp($row_data['row_pajak'])."</td>";
+                        echo "<td class='td-num fw-bold' style='background: #b2f5b2 !important; font-size:11px;'>".rp($row_data['row_netto'])."</td>";
                         echo "</tr>";
                     }
                 }
