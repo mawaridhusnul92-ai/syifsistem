@@ -225,35 +225,42 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     foreach ($teks_cols as $t) { $hdr1 .= "<th rowspan='2' class='col-teks'>".strtoupper($t['label'])."</th>"; }
     
     foreach ($horiz_groups as $gName => $items) {
-        $cs = count($items) * 3;
-        // Cek apakah grup ini punya group_header (kolom uraian)
         $firstItem = $items[0] ?? null;
         $gHeader = $firstItem['group_header'] ?? '';
         $gIsJafung = !empty($firstItem['is_jafung']);
-        if (!empty($gHeader)) {
-            $cs += 1; // tambah 1 untuk kolom uraian
+        $gSingleCol = !empty($firstItem['single_jafung_col']);
+        
+        if ($gSingleCol) {
+            // Mode 1 Kolom: QTY (dengan satuan dari komponen) | TARIF | JUMLAH
+            // Ambil satuan dari rincian komponen pertama
+            $first_rid   = (int)($items[0]['id_rincian'] ?? 0);
+            $satuanLabel = 'QTY';
+            if ($first_rid > 0) {
+                $res_sat = $conn->query("SELECT k.satuan FROM honor_komponen_detail k WHERE k.id = $first_rid LIMIT 1");
+                if ($res_sat && $row_sat = $res_sat->fetch_assoc()) {
+                    $satuanLabel = strtoupper($row_sat['satuan'] ?: 'QTY');
+                }
+            }
+            $cs = 3;
             $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
-            $hdr2 .= "<th class='cell-qty' style='min-width:120px;'>".strtoupper($gHeader)."</th>";
+            $hdr2 .= "<th class='cell-qty'>$satuanLabel</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
         } else {
-            $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
-        }
-        foreach($items as $it) {
-            $rid_it = $it['id_rincian'] ?? 0;
-            $satuan_it = !empty($rincian_master[$rid_it]['satuan']) ? $rincian_master[$rid_it]['satuan'] : 'QTY';
-            // Buat label Qty = satuan (misal: SKS / Mahasiswa) dan Tarif = Rp/satuan
-            $qty_lbl   = strtoupper($satuan_it);
-            $tarif_lbl = 'Rp/' . $satuan_it;
-            $hdr2 .= "<th class='cell-qty'>".strtoupper($it['label'])."<br><small class='fw-normal text-muted'>($qty_lbl)</small></th><th class='cell-nom'>$tarif_lbl</th><th class='cell-tot'>JUMLAH</th>";
+            $cs = count($items) * 3;
+            if (!empty($gHeader)) {
+                $cs += 1; // tambah 1 untuk kolom uraian
+                $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
+                $hdr2 .= "<th class='cell-qty' style='min-width:120px;'>".strtoupper($gHeader)."</th>";
+            } else {
+                $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
+            }
+            foreach($items as $it) { $hdr2 .= "<th class='cell-qty'>".strtoupper($it['label'])."</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>"; }
         }
     }
 
     if (count($vert_group_info['items']) > 0) {
         $hdr1 .= "<th rowspan='2' class='col-teks'>".strtoupper($vert_group_info['header'])."</th>";
         $hdr1 .= "<th colspan='3' class='th-group'>".strtoupper($vert_group_info['name'])."</th>";
-        // Ambil satuan dari item pertama grup vertikal
-        $first_v_rid = $vert_group_info['items'][0]['id_rincian'] ?? 0;
-        $first_v_sat = !empty($rincian_master[$first_v_rid]['satuan']) ? $rincian_master[$first_v_rid]['satuan'] : 'QTY';
-        $hdr2 .= "<th class='cell-qty'>JML ($first_v_sat)</th><th class='cell-nom'>Rp/$first_v_sat</th><th class='cell-tot'>JUMLAH</th>";
+        $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
     $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
@@ -426,6 +433,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                     }
                     hidRid.value = ridBaru;
                 }
+                // BUGFIX: update qty/kompId input names to match new rid
+                if (ridBaru !== String(rid)) {
+                    const qtyInp = tdQty.querySelector('.inp-qty');
+                    if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
+                }
             }
 
             // Update tarif di td-tarif (pakai ridBaru karena data-rid sudah diupdate)
@@ -434,6 +446,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                 const trfInp = tdTarif.querySelector('.inp-tarif');
                 if (trfInp) {
                     trfInp.value = fmtRp(tarifBaru);
+                    // BUGFIX: update tarif/kompId input names to match new rid
+                    if (ridBaru !== String(rid)) {
+                        trfInp.name = `komp_tarif_${ridBaru}[]`;
+                        const kidInp = tdTarif.querySelector(`input[name="komp_kompId_${rid}[]"]`);
+                        if (kidInp) kidInp.name = `komp_kompId_${ridBaru}[]`;
+                    }
                     // Highlight visual singkat agar user tahu tarif berubah
                     trfInp.style.background = '#fef9c3';
                     trfInp.style.color = '#b45309';
@@ -449,7 +467,53 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
         // ── Proses semua grup horizontal ─────────────────────────────
         for (const g in horizGroups) {
-            horizGroups[g].forEach(c => processItem(c));
+            const firstItem = horizGroups[g][0] || {};
+            const gSingleCol = firstItem.single_jafung_col || false;
+            
+            if (gSingleCol && jabatan) {
+                // MODE SINGLE COL: update rid dan tarif berdasarkan jabatan
+                const items = horizGroups[g];
+                const mDataFirst = masterTarif[items[0].id_rincian] || null;
+                if (mDataFirst) {
+                    const kompId = String(mDataFirst.komp_id);
+                    if (jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
+                        const jt = jafungTarif[kompId][jabatan];
+                        const ridBaru = String(jt.id);
+                        const tarifBaru = jt.besaran;
+                        if (pajakBaru === null) pajakBaru = jt.potongan_pajak;
+                        
+                        // Find the single-col td by group name
+                        const tdQty = tbody.querySelector(`td[data-single-col="true"][data-group-name="${g}"][data-role="td-qty"]`);
+                        if (tdQty) {
+                            const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
+                            const oldRid = tdQty.dataset.rid;
+                            if (hidRid) hidRid.value = ridBaru;
+                            // Update data-rid on all related tds
+                            tbody.querySelectorAll(`td[data-single-col="true"][data-group-name="${g}"]`).forEach(td => {
+                                td.dataset.rid = ridBaru;
+                            });
+                            // Update input names to match new rid
+                            const qtyInp = tdQty.querySelector('.inp-qty');
+                            if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
+                        }
+                        const tdTarif = tbody.querySelector(`td[data-single-col="true"][data-group-name="${g}"][data-role="td-tarif"]`);
+                        if (tdTarif) {
+                            const trfInp = tdTarif.querySelector('.inp-tarif');
+                            if (trfInp) {
+                                trfInp.value = fmtRp(tarifBaru);
+                                trfInp.name = `komp_tarif_${ridBaru}[]`;
+                                trfInp.style.background = '#fef9c3';
+                                trfInp.style.color = '#b45309';
+                                setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500);
+                            }
+                            const kidInp = tdTarif.querySelector('input[type="hidden"]');
+                            if (kidInp) { kidInp.value = mDataFirst.komp_id; kidInp.name = `komp_kompId_${ridBaru}[]`; }
+                        }
+                    }
+                }
+            } else {
+                horizGroups[g].forEach(c => processItem(c));
+            }
         }
 
         // ── Proses grup vertikal ──────────────────────────────────────
@@ -486,6 +550,9 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
             const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
             if (!isJafung) return; // Non-jafung selalu tampil
+            
+            // Skip items dari single_jafung_col groups (ditangani oleh updateJafungTarif)
+            if (c.single_jafung_col) return;
 
             const kompId = String(mData.komp_id);
 
@@ -683,50 +750,71 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             const firstItem  = horizGroups[g][0] || {};
             const gHeader    = firstItem.group_header || '';
             const gIsJafung  = firstItem.is_jafung || false;
+            const gSingleCol = firstItem.single_jafung_col || false;
 
-            // Jika ada group_header → render 1 kolom input teks uraian (rowspan)
-            if (gHeader) {
-                const uraianVal = d?.uraian_horiz?.[g] || '';
-                const inpUraian = document.createElement('input');
-                inpUraian.type      = 'text';
-                inpUraian.name      = `uraian_horiz_${encodeURIComponent(g)}[]`;
-                inpUraian.className = 'inp-gen text-dark';
-                inpUraian.value     = uraianVal;
-                inpUraian.placeholder = gHeader;
-                if (readOnly) inpUraian.disabled = true;
-                const tdUraian = createCell('', { cls: 'align-middle', rowspan: rs, dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
-                tdUraian.appendChild(inpUraian);
-                tr1.appendChild(tdUraian);
-            }
+            if (gSingleCol) {
+                // ═══ MODE SINGLE COLUMN: 1 set QTY | TARIF | JUMLAH ═══
+                // Tarif otomatis menyesuaikan jabatan fungsional dosen
+                const items = horizGroups[g];
+                // Tentukan rid yang cocok berdasarkan jabatan dosen (atau pakai item pertama sebagai default)
+                let activeRid = items[0].id_rincian;
+                let activeData = masterTarif[activeRid] || null;
+                let q = 0, t = activeData ? activeData.besaran : 0;
+                
+                // Jika ada data existing, cari rid yang punya data
+                if (d) {
+                    for (const c of items) {
+                        if (d.komponen?.[c.id_rincian] && d.komponen[c.id_rincian].qty > 0) {
+                            activeRid = c.id_rincian;
+                            activeData = masterTarif[activeRid] || null;
+                            q = d.komponen[activeRid].qty;
+                            t = d.komponen[activeRid].tarif;
+                            break;
+                        }
+                    }
+                }
+                
+                // Jika dosen sudah dipilih, cari tarif sesuai jabatan
+                if (d && d.dosen_jabatan) {
+                    const kompId = activeData ? String(activeData.komp_id) : '';
+                    if (kompId && jafungTarif[kompId] && jafungTarif[kompId][d.dosen_jabatan]) {
+                        const jt = jafungTarif[kompId][d.dosen_jabatan];
+                        activeRid = String(jt.id);
+                        t = jt.besaran;
+                    }
+                }
 
-            horizGroups[g].forEach(c => {
-                const rid   = c.id_rincian;
-                const mData = masterTarif[rid] || null;
-                let q = 0, t = mData ? mData.besaran : 0;
-                if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
-
-                // td QTY
+                // Hidden input untuk menyimpan semua rids dari grup ini (untuk referensi)
                 const inpHid = document.createElement('input');
-                inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
+                inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
+                // Data attribute untuk menyimpan info grup single col
+                const inpGrpInfo = document.createElement('input');
+                inpGrpInfo.type = 'hidden'; inpGrpInfo.name = `single_col_group[]`; inpGrpInfo.value = g;
+                
+                // td QTY
                 const inpQty = document.createElement('input');
-                inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
+                inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`;
                 inpQty.className = 'inp-gen text-center inp-qty';
                 inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
                 if (readOnly) inpQty.disabled = true;
                 inpQty.oninput = inpQty.onchange = () => calcRow(id);
-                const tdQty = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-qty' });
-                tdQty.appendChild(inpHid); tdQty.appendChild(inpQty);
+                const tdQty = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-qty' });
+                tdQty.dataset.singleCol = 'true';
+                tdQty.dataset.groupName = g;
+                tdQty.appendChild(inpHid); tdQty.appendChild(inpGrpInfo); tdQty.appendChild(inpQty);
                 tr1.appendChild(tdQty);
 
                 // td Tarif
                 const inpTrf = document.createElement('input');
-                inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
+                inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`;
                 inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
                 inpTrf.readOnly = true; inpTrf.tabIndex = -1;
                 const inpKid = document.createElement('input');
-                inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`;
-                inpKid.value = mData ? mData.komp_id : 0;
-                const tdTrf = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-tarif' });
+                inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`;
+                inpKid.value = activeData ? activeData.komp_id : 0;
+                const tdTrf = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-tarif' });
+                tdTrf.dataset.singleCol = 'true';
+                tdTrf.dataset.groupName = g;
                 tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid);
                 tr1.appendChild(tdTrf);
 
@@ -734,10 +822,69 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                 const inpJml = document.createElement('input');
                 inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
                 inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                const tdJml = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-jml' });
+                const tdJml = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-jml' });
+                tdJml.dataset.singleCol = 'true';
+                tdJml.dataset.groupName = g;
                 tdJml.appendChild(inpJml);
                 tr1.appendChild(tdJml);
-            });
+
+            } else {
+                // ═══ MODE NORMAL: Per-item columns ═══
+                // Jika ada group_header → render 1 kolom input teks uraian (rowspan)
+                if (gHeader) {
+                    const uraianVal = d?.uraian_horiz?.[g] || '';
+                    const inpUraian = document.createElement('input');
+                    inpUraian.type      = 'text';
+                    inpUraian.name      = `uraian_horiz_${encodeURIComponent(g)}[]`;
+                    inpUraian.className = 'inp-gen text-dark';
+                    inpUraian.value     = uraianVal;
+                    inpUraian.placeholder = gHeader;
+                    if (readOnly) inpUraian.disabled = true;
+                    const tdUraian = createCell('', { cls: 'align-middle', rowspan: rs, dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
+                    tdUraian.appendChild(inpUraian);
+                    tr1.appendChild(tdUraian);
+                }
+
+                horizGroups[g].forEach(c => {
+                    const rid   = c.id_rincian;
+                    const mData = masterTarif[rid] || null;
+                    let q = 0, t = mData ? mData.besaran : 0;
+                    if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
+
+                    // td QTY
+                    const inpHid = document.createElement('input');
+                    inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
+                    const inpQty = document.createElement('input');
+                    inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
+                    inpQty.className = 'inp-gen text-center inp-qty';
+                    inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
+                    if (readOnly) inpQty.disabled = true;
+                    inpQty.oninput = inpQty.onchange = () => calcRow(id);
+                    const tdQty = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-qty' });
+                    tdQty.appendChild(inpHid); tdQty.appendChild(inpQty);
+                    tr1.appendChild(tdQty);
+
+                    // td Tarif
+                    const inpTrf = document.createElement('input');
+                    inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
+                    inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
+                    inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+                    const inpKid = document.createElement('input');
+                    inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`;
+                    inpKid.value = mData ? mData.komp_id : 0;
+                    const tdTrf = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-tarif' });
+                    tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid);
+                    tr1.appendChild(tdTrf);
+
+                    // td Jumlah
+                    const inpJml = document.createElement('input');
+                    inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
+                    inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+                    const tdJml = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-jml' });
+                    tdJml.appendChild(inpJml);
+                    tr1.appendChild(tdJml);
+                });
+            }
         }
 
         // ── Kolom grup Vertikal baris-1 ──────────────────────────────
@@ -933,7 +1080,47 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     }
 
     function executeSubmit() {
-        const fd  = new FormData(document.getElementById('formDetailGen'));
+        // ── Snapshot state aktif ke hidden inputs sebelum submit ──────
+        // Masalah: saat single_jafung_col, rid di DOM bisa berganti-ganti
+        // sehingga komp_qty_{rid}[] tidak konsisten. Solusi: buat snapshot
+        // flat (satu per dosen per grup) yang pasti konsisten.
+        const form = document.getElementById('formDetailGen');
+
+        // Hapus snapshot lama jika ada
+        form.querySelectorAll('input.snap-submit').forEach(el => el.remove());
+
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach((tbody, rowIdx) => {
+            // Kumpulkan semua td[data-role="td-qty"] dalam baris ini
+            tbody.querySelectorAll('td[data-role="td-qty"]').forEach(tdQty => {
+                const rid    = tdQty.dataset.rid;
+                const qtyInp = tdQty.querySelector('input[type="number"]');
+                if (!rid || !qtyInp) return;
+                const qty = parseFloat(qtyInp.value) || 0;
+                if (qty <= 0) return; // skip kosong
+
+                // Ambil tarif dari td-tarif
+                const tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
+                const trfInp  = tdTarif ? tdTarif.querySelector('.inp-tarif') : null;
+                const tarif   = trfInp ? cleanNum(trfInp.value) : 0;
+
+                // Ambil kompId
+                const kidInp = tdTarif ? tdTarif.querySelector(`input[name^="komp_kompId_"]`) : null;
+                const kompId = kidInp ? kidInp.value : 0;
+
+                // Pastikan hidden rincian_ids[] dan komp_qty/tarif/kompId input
+                // di dalam form sudah benar. Jika belum ada atau rid-nya beda,
+                // tambahkan sebagai snapshot baru.
+                const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
+                if (hidRid) hidRid.value = rid; // update ke rid aktif
+
+                // Pastikan komp_qty dan komp_tarif input namanya sesuai rid aktif
+                if (qtyInp) qtyInp.name = `komp_qty_${rid}[]`;
+                if (trfInp) trfInp.name = `komp_tarif_${rid}[]`;
+                if (kidInp) kidInp.name = `komp_kompId_${rid}[]`;
+            });
+        });
+
+        const fd  = new FormData(form);
         const btn = document.querySelector('[onclick="submitHonorDetail(0)"]');
         if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...'; btn.disabled = true; }
         fetch('honorarium_action.php', { method: 'POST', body: fd })
