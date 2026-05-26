@@ -84,6 +84,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     .cell-qty { min-width: 70px; text-align: center; } .cell-nom { min-width: 120px; text-align: right; } .cell-tot { min-width: 120px; text-align: right; font-weight: 800; background: #f8fafc; color: #0d6efd; white-space: nowrap; }
     .txt-total { white-space: nowrap; min-width: 130px; text-align: right !important; padding: 4px 8px; font-weight: 700; } .txt-potongan { white-space: nowrap; min-width: 120px; text-align: right !important; padding: 4px 8px; font-weight: 700; color: #dc3545 !important; } .txt-netto { white-space: nowrap; min-width: 140px; text-align: right !important; padding: 4px 8px; font-weight: 700; font-size: 1.05em; color: #198754 !important; }
     .btn-action { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px;}
+    /* Sub-row: sembunyikan kolom No dan Dosen (collapse) */
+    .honor-row[data-root-id] td.row-no-sub,
+    .honor-row[data-root-id] td.col-dosen-sub { width:0 !important; max-width:0 !important; padding:0 !important; border:none !important; overflow:hidden !important; }
+    /* Garis kiri hijau pada baris sub (sebagai penanda visual) */
+    tbody.honor-row[data-root-id] { border-left: 4px solid #22c55e !important; }
     /* Highlight sel jumlah saat ada nilai */
     .inp-jml-display { text-align: right; font-weight: 700; color: #0d6efd; background: transparent; border: none; width: 100%; padding: 0; }
     /* ── Hilangkan spinner (tanda panah atas/bawah) pada input number ── */
@@ -1032,79 +1037,71 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     }
 
     // ================================================================
-    // ================================================================
-    //  addSubRowSameDosen — Tambah baris baru di bawah dengan dosen SAMA
-    //  Kolom No dan Tenaga Pengajar di parent di-MERGE (rowspan bertambah).
-    //  Baris baru tidak punya kolom No/Dosen sendiri.
-    //  Tombol X di baris sub mengembalikan rowspan parent ke semula.
+    //  addSubRowSameDosen — Tambah baris baru, dosen sama, mata kuliah baru
+    //  Pendekatan: setiap sub-baris punya <tbody> sendiri dengan SEMUA kolom.
+    //  Kolom No dan Tenaga Pengajar dibuat tapi di-collapse (width:0, no-border)
+    //  sehingga tidak terlihat dan tidak menggeser kolom lain.
+    //  Tombol + bisa diklik berulang kali tanpa batas.
     // ================================================================
     function addSubRowSameDosen(parentId) {
-        const parentTbody = document.getElementById(`hr_${parentId}`);
-        if (!parentTbody) return;
+        // Selalu merge/collapse ke baris ROOT (bukan sub yang punya rootId)
+        let rootId = parentId;
+        const selfTbody = document.getElementById(`hr_${parentId}`);
+        if (selfTbody && selfTbody.dataset.rootId) {
+            rootId = selfTbody.dataset.rootId;
+        }
+        const rootTbody = document.getElementById(`hr_${rootId}`);
+        if (!rootTbody) return;
 
-        // Ambil data dari baris induk
-        const selDosenParent = parentTbody.querySelector('select[name="dosen_id[]"]');
-        const dosenId = selDosenParent ? selDosenParent.value : '';
+        const selDosenRoot = rootTbody.querySelector('select[name="dosen_id[]"]');
+        const dosenId = selDosenRoot ? selDosenRoot.value : '';
         if (!dosenId) {
             Swal.fire('Peringatan', 'Pilih dosen terlebih dahulu sebelum menambah baris.', 'warning');
             return;
         }
 
-        const selJabatanParent = parentTbody.querySelector('select.inp-jabatan');
-        const jabatan = selJabatanParent ? selJabatanParent.value : '';
-        const pajakParent = parentTbody.querySelector('.inp-pajak-pct');
-        const pajakVal = pajakParent ? pajakParent.value : '0';
-        const prodiInp = parentTbody.querySelector('input.inp-prodi');
-        const prodiVal = prodiInp ? prodiInp.value : '';
-
-        // ── Increment rowspan No dan Tenaga Pengajar di baris induk ──
-        // Ambil <tr> pertama di parentTbody
-        const parentTr1 = parentTbody.querySelector('tr');
-        const tdNoParent    = parentTr1 ? parentTr1.querySelector('.row-no') : null;
-        const tdDosenParent = parentTr1 ? parentTr1.querySelector('td:has(select[name="dosen_id[]"])') : null;
-
-        // Fallback: jika :has tidak support, cari td kedua setelah No
-        let tdDosenEl = tdDosenParent;
-        if (!tdDosenEl && parentTr1) {
-            const tds = parentTr1.querySelectorAll('td');
-            for (const td of tds) {
-                if (td.querySelector('select[name="dosen_id[]"]')) { tdDosenEl = td; break; }
-            }
-        }
+        const selJabatanRoot = rootTbody.querySelector('select.inp-jabatan');
+        const jabatan  = selJabatanRoot ? selJabatanRoot.value : '';
+        const pajakEl  = rootTbody.querySelector('.inp-pajak-pct');
+        const pajakVal = pajakEl ? pajakEl.value : '0';
+        const prodiEl  = rootTbody.querySelector('input.inp-prodi');
+        const prodiVal = prodiEl ? prodiEl.value : '';
 
         const vItems = vertGroup.items || [];
-        const rs     = vItems.length > 0 ? vItems.length : 1; // rowspan sub-baris
-
-        // Tambahkan rs ke rowspan existing di parent (kolom No + Dosen)
-        if (tdNoParent)  tdNoParent.rowSpan  = (tdNoParent.rowSpan  || 1) + rs;
-        if (tdDosenEl)   tdDosenEl.rowSpan   = (tdDosenEl.rowSpan   || 1) + rs;
+        const rs     = vItems.length > 0 ? vItems.length : 1;
 
         rCount++;
         const newId = rCount;
 
-        // ── Buat <tbody> baru ────────────────────────────────────────
+        // ── Buat <tbody> baru (mandiri, kolom lengkap) ───────────────
         const tbody = document.createElement('tbody');
-        tbody.id        = `hr_${newId}`;
-        tbody.className = 'honor-row bg-white';
-        tbody.dataset.parentId = parentId; // referensi ke parent
+        tbody.id             = `hr_${newId}`;
+        tbody.className      = 'honor-row bg-white';
+        tbody.dataset.rootId = String(rootId);  // referensi ke root
 
         function mkTr() {
             const tr = document.createElement('tr');
             tbody.appendChild(tr);
             return tr;
         }
-
         const tr1 = mkTr();
-        // TIDAK tambahkan kolom No dan Tenaga Pengajar — sudah di-merge dari parent
 
-        // Hidden input dosen_id agar saat submit tahu dosen siapa
-        const inpDosenHid = document.createElement('input');
-        inpDosenHid.type = 'hidden';
-        inpDosenHid.name = 'dosen_id[]';
-        inpDosenHid.value = dosenId;
-        tr1.appendChild(inpDosenHid);
+        // ── Kolom No: collapse (tidak tampil, tidak menggeser) ────────
+        const tdNo = createCell('', { cls: 'row-no-sub', rowspan: rs });
+        tdNo.style.cssText = 'width:0; max-width:0; padding:0; border:none; overflow:hidden;';
+        tr1.appendChild(tdNo);
 
-        // Kolom teks (prodi, matkul, jabatan, dll)
+        // ── Kolom Tenaga Pengajar: collapse, hanya berisi hidden input ─
+        const tdDosen = createCell('', { cls: 'col-dosen-sub text-start align-middle', rowspan: rs });
+        tdDosen.style.cssText = 'width:0; max-width:0; padding:0; border:none; overflow:hidden;';
+        const inpDosenHid  = document.createElement('input');
+        inpDosenHid.type   = 'hidden';
+        inpDosenHid.name   = 'dosen_id[]';
+        inpDosenHid.value  = dosenId;
+        tdDosen.appendChild(inpDosenHid);
+        tr1.appendChild(tdDosen);
+
+        // ── Kolom teks (prodi, matkul, jabatan, dll) ─────────────────
         teksCols.forEach(c => {
             let val = '';
             if (c.source === 'prodi')   val = prodiVal;
@@ -1130,9 +1127,9 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                 tdT.appendChild(selJabatan);
             } else {
                 const inp = document.createElement('input');
-                inp.type  = 'text';
-                inp.name  = `teks_${c.source}[]`;
-                inp.value = val;
+                inp.type      = 'text';
+                inp.name      = `teks_${c.source}[]`;
+                inp.value     = val;
                 let extraClass = '';
                 if (c.source === 'prodi') extraClass = ' inp-prodi';
                 inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
@@ -1150,7 +1147,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             tr1.appendChild(tdT);
         });
 
-        // Kolom komponen horizontal
+        // ── Kolom komponen horizontal ─────────────────────────────────
         for (const g in horizGroups) {
             const firstItem  = horizGroups[g][0] || {};
             const gHeader    = firstItem.group_header || '';
@@ -1224,11 +1221,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             }
         }
 
-        // Kolom vertikal baris-1
+        // ── Kolom vertikal baris-1 ────────────────────────────────────
         if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
 
-        // Total Bruto, Pajak, Potongan, Netto
-        const tdBruto = createCell('', { cls: 'txt-total align-middle', rowspan: rs, style: 'min-width:130px; text-align:right !important; padding: 4px 8px;' });
+        // ── Total Bruto, Pajak, Potongan, Netto ──────────────────────
+        const tdBruto = createCell('', { cls: 'txt-total align-middle', rowspan: rs, style: 'min-width:130px; text-align:right !important; padding:4px 8px;' });
         tr1.appendChild(tdBruto);
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
@@ -1241,18 +1238,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         };
         const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('', { cls: 'txt-potongan align-middle', rowspan: rs, style: 'min-width:120px; text-align:right !important; padding: 4px 8px;' }));
-        tr1.appendChild(createCell('', { cls: 'txt-netto align-middle', rowspan: rs, style: 'min-width:140px; text-align:right !important; padding: 4px 8px; background:#f0fff4;' }));
+        tr1.appendChild(createCell('', { cls: 'txt-potongan align-middle', rowspan: rs, style: 'min-width:120px; text-align:right !important; padding:4px 8px;' }));
+        tr1.appendChild(createCell('', { cls: 'txt-netto align-middle', rowspan: rs, style: 'min-width:140px; text-align:right !important; padding:4px 8px; background:#f0fff4;' }));
 
-        // Tombol aksi sub-baris: X hapus saja (+ ada di parent)
+        // ── Tombol Aksi: X hapus baris ini ───────────────────────────
         const btnDelSub = document.createElement('button');
-        btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
+        btnDelSub.type    = 'button';
+        btnDelSub.title   = 'Hapus Baris Ini';
         btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
         btnDelSub.innerHTML = '<i class="fas fa-times fw-bold"></i>';
         btnDelSub.onclick = () => {
-            // Kembalikan rowspan parent sebelum hapus
-            if (tdNoParent)  tdNoParent.rowSpan  = Math.max(1, (tdNoParent.rowSpan  || 1) - rs);
-            if (tdDosenEl)   tdDosenEl.rowSpan   = Math.max(1, (tdDosenEl.rowSpan   || 1) - rs);
             tbody.remove();
             calcSummary();
         };
@@ -1260,18 +1255,25 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const wrapDiv = document.createElement('div');
         wrapDiv.className = 'd-flex justify-content-center gap-1';
         wrapDiv.appendChild(btnDelSub);
-        tdAksi.appendChild(wrapDiv); tr1.appendChild(tdAksi);
+        tdAksi.appendChild(wrapDiv);
+        tr1.appendChild(tdAksi);
 
-        // Baris vertikal ke-2 dst
+        // ── Baris vertikal ke-2 dst ───────────────────────────────────
         for (let i = 1; i < vItems.length; i++) {
             const trN = mkTr();
             appendVertRow(trN, vItems[i], null, newId, 1);
         }
 
-        // Sisipkan tbody baru SETELAH tbody induk
-        parentTbody.insertAdjacentElement('afterend', tbody);
+        // ── Sisipkan setelah tbody terakhir milik rootId ──────────────
+        let insertAfter = rootTbody;
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tb => {
+            if (tb === rootTbody || tb.dataset.rootId === String(rootId)) {
+                insertAfter = tb;
+            }
+        });
+        insertAfter.insertAdjacentElement('afterend', tbody);
 
-        // Sinkronkan jabatan & tarif
+        // ── Sinkronkan jabatan & tarif ────────────────────────────────
         if (jabatan) {
             setTimeout(() => {
                 updateJafungTarif(newId, jabatan);
