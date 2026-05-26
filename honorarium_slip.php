@@ -18,8 +18,9 @@ $filter_tahun = (int)($_GET['fth'] ?? date('Y'));
 if ($filter_bulan < 1 || $filter_bulan > 12) $filter_bulan = (int)date('n');
 if ($filter_tahun < 2000 || $filter_tahun > 2100) $filter_tahun = (int)date('Y');
 
-// ── Ambil daftar generate_id yang berlabel KUITANSI (atau tanpa template) ──
-// Ini menggantikan LEFT JOIN + OR IS NULL yang menyebabkan full scan
+// ── PENDEKATAN BARU: Tampilkan slip dari generate yang pakai template PENGAJUAN
+// (atau generate tanpa template). Template KUITANSI ter-link otomatis dari sana.
+// Untuk cetak kuitansi: cari template kuitansi yang linked_pengajuan_template_id = template generate tersebut.
 $valid_gen_ids = [];
 $res_gids = $conn->query(
     "SELECT g.id FROM honor_generate g
@@ -27,10 +28,19 @@ $res_gids = $conn->query(
      WHERE g.status IN ('Final','Dibayarkan')
        AND g.periode_bulan = $filter_bulan
        AND g.periode_tahun = $filter_tahun
-       AND (t.jenis_tujuan = 'KUITANSI' OR g.template_id IS NULL OR t.id IS NULL)"
+       AND (t.jenis_tujuan = 'PENGAJUAN' OR g.template_id IS NULL OR t.id IS NULL)"
 );
 if ($res_gids) {
     while ($row = $res_gids->fetch_assoc()) $valid_gen_ids[] = (int)$row['id'];
+}
+
+// Ambil template kuitansi yang tersedia per template pengajuan (untuk tombol cetak kuitansi)
+$kuitansi_tpl_map = []; // [pengajuan_template_id => kuitansi_template_id]
+$res_ktpl = $conn->query("SELECT id, linked_pengajuan_template_id FROM honor_template WHERE jenis_tujuan='KUITANSI' AND linked_pengajuan_template_id IS NOT NULL");
+if ($res_ktpl) {
+    while ($rk = $res_ktpl->fetch_assoc()) {
+        $kuitansi_tpl_map[(int)$rk['linked_pengajuan_template_id']] = (int)$rk['id'];
+    }
 }
 
 $slip_list = [];
@@ -39,7 +49,8 @@ if (!empty($valid_gen_ids)) {
     $sql_slip = "SELECT 
                     d.dosen_id, 
                     g.periode_bulan, 
-                    g.periode_tahun, 
+                    g.periode_tahun,
+                    g.template_id AS gen_template_id,
                     ds.nama  AS dosen_nama, 
                     ds.email AS dosen_email,
                     ds.jabatan_fungsional AS jabatan,
@@ -55,7 +66,7 @@ if (!empty($valid_gen_ids)) {
                 JOIN honor_generate g  ON d.generate_id = g.id
                 JOIN dosen          ds ON d.dosen_id    = ds.id
                 WHERE d.generate_id IN ($gen_in)
-                GROUP BY d.dosen_id, g.periode_bulan, g.periode_tahun
+                GROUP BY d.dosen_id, g.periode_bulan, g.periode_tahun, g.template_id
                 ORDER BY ds.nama ASC";
     $res_slip = $conn->query($sql_slip);
     if ($res_slip) while ($r = $res_slip->fetch_assoc()) $slip_list[] = $r;
@@ -172,6 +183,10 @@ $akun_kas = $akun_kas_res ? $akun_kas_res->fetch_all(MYSQLI_ASSOC) : [];
                         $byr_cls = $s['status_bayar'] == 'Sudah Dibayar' ? 'bg-success' : 'bg-danger';
                         $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
                         $periode_str = $nm_bln[$s['periode_bulan']] . ' ' . $s['periode_tahun'];
+                        // Cek apakah ada template kuitansi yang ter-link ke template pengajuan ini
+                        $gen_tpl_id   = (int)($s['gen_template_id'] ?? 0);
+                        $kuitansi_tpl_id = $gen_tpl_id > 0 ? ($kuitansi_tpl_map[$gen_tpl_id] ?? 0) : 0;
+                        $has_kuitansi_tpl = $kuitansi_tpl_id > 0;
                     ?>
                     <tr>
                         <td class="text-center">
@@ -186,20 +201,59 @@ $akun_kas = $akun_kas_res ? $akun_kas_res->fetch_all(MYSQLI_ASSOC) : [];
                             <div class="fw-bold text-primary"><?= $s['dosen_nama'] ?></div>
                             <div class="small text-muted"><?= $s['jabatan'] ?></div>
                         </td>
-                        <td class="text-start fw-bold text-dark">Kuitansi Pembayaran Honorarium<br><code class="text-muted bg-light px-1 border"><?= $periode_str ?></code></td>
+                        <td class="text-start fw-bold text-dark">
+                            Slip Honor Pembayaran
+                            <?php if ($has_kuitansi_tpl): ?>
+                            <span class="badge bg-success text-white ms-1 rounded-pill" style="font-size:10px;">
+                                <i class="fas fa-sync-alt me-1"></i>Kuitansi Sinkron
+                            </span>
+                            <?php else: ?>
+                            <span class="badge bg-secondary text-white ms-1 rounded-pill" style="font-size:10px;">
+                                <i class="fas fa-file-alt me-1"></i>Default
+                            </span>
+                            <?php endif; ?>
+                            <br><code class="text-muted bg-light px-1 border"><?= $periode_str ?></code>
+                            <br><span class="small text-muted"><?= htmlspecialchars($s['nama_generate']) ?></span>
+                        </td>
                         <td class="text-center fw-bold text-muted"><?= $periode_str ?></td>
                         <td class="text-end fw-bold text-success fs-6">Rp <?= number_format($s['honor_diterima'],0,',','.') ?></td>
                         <td class="text-center"><span class="badge <?= $byr_cls ?> rounded-pill px-3 py-1 shadow-sm"><?= $s['status_bayar'] ?></span></td>
                         <td class="text-center">
-                            <div class="d-flex justify-content-center gap-1">
-                                <button class="btn-action-slip bg-light border text-primary shadow-sm" title="Cetak Kuitansi Slip (PDF)" onclick="window.open('print_slip_honor.php?mode=slip&detail_ids=<?= $s['detail_ids'] ?>', '_blank')"><i class="fas fa-print"></i></button>
+                            <div class="d-flex justify-content-center gap-1 flex-wrap">
+                                <?php if ($has_kuitansi_tpl): ?>
+                                <!-- Cetak kuitansi dengan template sinkron (pakai layout kuitansi ter-link) -->
+                                <button class="btn-action-slip bg-primary text-white border-0 shadow-sm"
+                                        title="Cetak Kuitansi (Template Sinkron)"
+                                        onclick="window.open('print_slip_honor.php?mode=slip&detail_ids=<?= $s['detail_ids'] ?>&kuitansi_tpl_id=<?= $kuitansi_tpl_id ?>', '_blank')">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                                <?php else: ?>
+                                <!-- Cetak kuitansi default (tanpa template kustom) -->
+                                <button class="btn-action-slip bg-light border text-primary shadow-sm"
+                                        title="Cetak Kuitansi Slip (Default)"
+                                        onclick="window.open('print_slip_honor.php?mode=slip&detail_ids=<?= $s['detail_ids'] ?>', '_blank')">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                                <?php endif; ?>
                                 
-                                <button class="btn-action-slip bg-light border <?= $s['status_kirim']=='Sudah Dikirim'?'text-success':'text-secondary' ?> shadow-sm" title="Kirim Slip ke Email" onclick="modalEmailMassal(1, '<?= $s['detail_ids'] ?>', '<?= $s['dosen_email'] ?>')"><i class="fas fa-envelope"></i></button>
+                                <button class="btn-action-slip bg-light border <?= $s['status_kirim']=='Sudah Dikirim'?'text-success':'text-secondary' ?> shadow-sm"
+                                        title="Kirim Slip ke Email"
+                                        onclick="modalEmailMassal(1, '<?= $s['detail_ids'] ?>', '<?= $s['dosen_email'] ?>')">
+                                    <i class="fas fa-envelope"></i>
+                                </button>
 
                                 <?php if($s['status_bayar'] == 'Belum Dibayar'): ?>
-                                <button class="btn-action-slip bg-light border text-success shadow-sm" title="Bayar & Jurnalkan" onclick="modalBayarMassal(1, <?= $s['honor_diterima'] ?>, '<?= $s['detail_ids'] ?>')"><i class="fas fa-money-check-alt"></i></button>
+                                <button class="btn-action-slip bg-light border text-success shadow-sm"
+                                        title="Bayar & Jurnalkan"
+                                        onclick="modalBayarMassal(1, <?= $s['honor_diterima'] ?>, '<?= $s['detail_ids'] ?>')">
+                                    <i class="fas fa-money-check-alt"></i>
+                                </button>
                                 <?php else: ?>
-                                <button class="btn-action-slip bg-danger text-white border-0 shadow-sm" title="Batal Pembayaran (Tarik Jurnal)" onclick="batalBayarKasir('<?= $s['detail_ids'] ?>')"><i class="fas fa-undo"></i></button>
+                                <button class="btn-action-slip bg-danger text-white border-0 shadow-sm"
+                                        title="Batal Pembayaran (Tarik Jurnal)"
+                                        onclick="batalBayarKasir('<?= $s['detail_ids'] ?>')">
+                                    <i class="fas fa-undo"></i>
+                                </button>
                                 <?php endif; ?>
                             </div>
                         </td>

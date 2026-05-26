@@ -23,7 +23,8 @@ $generate_list = [];
 $res_gen = $conn->query("SELECT g.*, t.nama_template, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id ORDER BY g.id DESC");
 if($res_gen) while($r = $res_gen->fetch_assoc()) $generate_list[] = $r;
 
-$templates = $conn->query("SELECT * FROM honor_template ORDER BY nama_template ASC")->fetch_all(MYSQLI_ASSOC);
+// Hanya template PENGAJUAN yang digunakan untuk generate honor (input data 1x)
+$templates = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY nama_template ASC")->fetch_all(MYSQLI_ASSOC);
 
 if ($view_mode == 'detail' && $gen_id > 0) {
     $gen_head = $conn->query("SELECT g.*, t.nama_template, t.custom_layout, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id WHERE g.id = $gen_id")->fetch_assoc();
@@ -157,8 +158,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                         <label class="form-label small fw-bold text-primary">Pilih Layout Template Tabel <span class="text-danger">*</span></label>
                         <select name="template_id" id="inpTemplateGen" class="form-select rounded-3 border-primary shadow-sm fw-bold px-3 py-2 bg-white" required>
                             <option value="">-- Pilih Template --</option>
-                            <?php foreach($templates as $t) echo "<option value='{$t['id']}'>{$t['nama_template']} ({$t['jenis_tujuan']})</option>"; ?>
+                            <?php foreach($templates as $t) echo "<option value='{$t['id']}'>{$t['nama_template']} (PENGAJUAN)</option>"; ?>
                         </select>
+                        <div class="form-text text-primary fw-bold">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Hanya Template <strong>PENGAJUAN</strong> yang tampil. Kuitansi ter-generate otomatis dari sinkronisasi.
+                        </div>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">

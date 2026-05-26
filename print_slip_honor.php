@@ -23,6 +23,8 @@ if (!isset($conn)) {
 
 $mode    = $_GET['mode'] ?? 'slip';
 $ids_raw = $_GET['detail_ids'] ?? '';
+// ID template kuitansi yang ter-link (opsional, dari honorarium_slip.php)
+$override_kuitansi_tpl_id = (int)($_GET['kuitansi_tpl_id'] ?? 0);
 
 // Sanitasi ID
 $ids_clean = [];
@@ -405,8 +407,15 @@ foreach ($slips as $did => $dosen_data):
     <?php foreach ($dosen_data['generations'] as $gid => $gen): ?>
         
         <?php
-        // Parser Layout
-        $layout_cols  = json_decode($gen['layout_json'], true) ?: [];
+        // Parser Layout: jika ada override template kuitansi ter-link, gunakan layout-nya
+        $layout_cols_raw = $gen['layout_json'];
+        if ($override_kuitansi_tpl_id > 0) {
+            $res_ktpl = $conn->query("SELECT custom_layout FROM honor_template WHERE id=$override_kuitansi_tpl_id AND jenis_tujuan='KUITANSI' LIMIT 1");
+            if ($res_ktpl && $ktpl_row = $res_ktpl->fetch_assoc()) {
+                $layout_cols_raw = $ktpl_row['custom_layout'];
+            }
+        }
+        $layout_cols  = json_decode($layout_cols_raw, true) ?: [];
         $teks_cols    = []; $horiz_groups = []; $vert_info = ['name'=>'', 'header'=>'URAIAN', 'items'=>[]];
         foreach ($layout_cols as $c) {
             if ($c['type'] === 'teks') {
