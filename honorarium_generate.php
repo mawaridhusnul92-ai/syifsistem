@@ -234,16 +234,21 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             // Mode 1 Kolom: QTY (dengan satuan dari komponen) | TARIF | JUMLAH
             // Ambil satuan dari rincian komponen pertama
             $first_rid   = (int)($items[0]['id_rincian'] ?? 0);
+            $sat_map = ['Per Mahasiswa'=>'Mhs','Per SKS'=>'SKS','Per Pertemuan'=>'Pertemuan',
+                        'Per Kegiatan'=>'Kegiatan','Per Jam'=>'Jam','Per Soal'=>'Soal','Lump Sum'=>'Ls'];
             $satuanLabel = 'QTY';
+            $tarifLabel  = 'TARIF (Rp)';
             if ($first_rid > 0) {
-                $res_sat = $conn->query("SELECT k.satuan FROM honor_komponen_detail k WHERE k.id = $first_rid LIMIT 1");
+                $res_sat = $conn->query("SELECT satuan FROM honor_komponen_detail WHERE id = $first_rid LIMIT 1");
                 if ($res_sat && $row_sat = $res_sat->fetch_assoc()) {
-                    $satuanLabel = strtoupper($row_sat['satuan'] ?: 'QTY');
+                    $s = $row_sat['satuan'] ?: 'Qty';
+                    $satuanLabel = strtoupper($sat_map[$s] ?? $s);
+                    $tarifLabel  = "Rp/$satuanLabel";
                 }
             }
             $cs = 3;
             $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
-            $hdr2 .= "<th class='cell-qty'>$satuanLabel</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
+            $hdr2 .= "<th class='cell-qty'>$satuanLabel</th><th class='cell-nom'>$tarifLabel</th><th class='cell-tot'>JUMLAH</th>";
         } else {
             $cs = count($items) * 3;
             if (!empty($gHeader)) {
@@ -253,7 +258,19 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             } else {
                 $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
             }
-            foreach($items as $it) { $hdr2 .= "<th class='cell-qty'>".strtoupper($it['label'])."</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>"; }
+            foreach($items as $it) {
+                $it_rid = (int)($it['id_rincian'] ?? 0);
+                $it_sat_lbl = 'QTY'; $it_trf_lbl = 'TARIF (Rp)';
+                if ($it_rid > 0) {
+                    $rs2 = $conn->query("SELECT satuan FROM honor_komponen_detail WHERE id=$it_rid LIMIT 1");
+                    if ($rs2 && $rw2 = $rs2->fetch_assoc()) {
+                        $s2 = $rw2['satuan'] ?: 'Qty';
+                        $it_sat_lbl = strtoupper($sat_map[$s2] ?? $s2);
+                        $it_trf_lbl = "Rp/$it_sat_lbl";
+                    }
+                }
+                $hdr2 .= "<th class='cell-qty'>".strtoupper($it['label'])."<br><small>($it_sat_lbl)</small></th><th class='cell-nom'>$it_trf_lbl</th><th class='cell-tot'>JUMLAH</th>";
+            }
         }
     }
 
