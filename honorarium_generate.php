@@ -286,8 +286,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
-    $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
+    $hdr1 .= "<th rowspan='2' style='min-width: 130px; white-space:nowrap;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px; white-space:nowrap;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px; white-space:nowrap;'>POTONGAN</th><th rowspan='2' style='min-width: 150px; white-space:nowrap;' class='text-end pe-3'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px; white-space:nowrap;'>Aksi</th>";
 ?>
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
@@ -698,7 +698,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             if (d && String(o.val) === String(d.dosen_id)) opt.selected = true;
             selDosen.appendChild(opt);
         });
-        const tdDosen = createCell('', { cls: 'text-start align-middle', rowspan: rs });
+        const tdDosen = createCell('', { cls: 'text-start align-top', rowspan: rs });
+        tdDosen.style.paddingTop = '8px';
         tdDosen.appendChild(selDosen);
         tr1.appendChild(tdDosen);
 
@@ -933,8 +934,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tdPajak.appendChild(inpPajak);
         tr1.appendChild(tdPajak);
 
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:130px; border-left:2px solid #e2e8f0;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:150px; border-left:2px solid #e2e8f0;' }));
 
         if (!readOnly) {
             const btnDel = document.createElement('button');
@@ -950,7 +951,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             btnAdd.onclick = () => addSubRowSameDosen(id);
 
             const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs });
-            tdAksi.style.cssText = 'min-width:70px;';
+            tdAksi.style.cssText = 'min-width:90px; border-left:2px solid #e2e8f0;';
 
             const wrapDiv = document.createElement('div');
             wrapDiv.className = 'd-flex justify-content-center gap-1';
@@ -1113,7 +1114,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             if (String(o.val) === String(dosenId)) opt.selected = true;
             selDosen.appendChild(opt);
         });
-        const tdDosen = createCell('', { cls: 'text-start align-middle', rowspan: rs, style: 'background:#f0fff4; border-left:3px solid #22c55e;' });
+        const tdDosen = createCell('', { cls: 'text-start align-top', rowspan: rs, style: 'background:#f0fff4; border-left:3px solid #22c55e;' });
         tdDosen.appendChild(selDosen);
         tr1.appendChild(tdDosen);
 
@@ -1259,8 +1260,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         };
         const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:130px; border-left:2px solid #e2e8f0;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:150px; border-left:2px solid #e2e8f0;' }));
 
         // Tombol aksi
         const btnDelSub = document.createElement('button');
@@ -1273,7 +1274,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
         btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
         btnAddSub.onclick = () => addSubRowSameDosen(newId);
-        const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:70px;' });
+        const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:90px; border-left:2px solid #e2e8f0;' });
         const wrapDiv = document.createElement('div');
         wrapDiv.className = 'd-flex justify-content-center gap-1';
         wrapDiv.appendChild(btnDelSub); wrapDiv.appendChild(btnAddSub);
