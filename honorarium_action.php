@@ -359,7 +359,6 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'ID Generate tidak valid!']); break;
             }
 
-            // Cek status — hanya Draft yang bisa diedit
             $cek_stat = $conn->query("SELECT status FROM honor_generate WHERE id=$gen_id");
             if (!$cek_stat || $cek_stat->num_rows === 0) {
                 echo json_encode(['status' => 'error', 'message' => 'Generate tidak ditemukan!']); break;
@@ -368,12 +367,29 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Hanya Generate berstatus DRAFT yang bisa diedit!']); break;
             }
 
-            $dosen_ids  = $_POST['dosen_id'] ?? [];
-            $rincian_ids = $_POST['rincian_ids'] ?? [];
+            $dosen_ids   = $_POST['dosen_id'] ?? [];
+            $n_dosen     = count($dosen_ids);
 
-            if (empty($dosen_ids)) {
+            if ($n_dosen === 0) {
                 echo json_encode(['status' => 'error', 'message' => 'Minimal harus ada 1 entri dosen!']); break;
             }
+
+            // ── Bangun peta rid → array nilai per-kemunculan ───────────
+            // Semua input komp_qty_{rid}[], komp_tarif_{rid}[], komp_kompId_{rid}[]
+            // diindeks berdasarkan urutan kemunculan rid di rincian_ids[].
+            // Karena executeSubmit sudah memastikan nama input konsisten,
+            // kita cukup iterasi dosen_ids dan ambil nilai dengan counter per-rid.
+
+            $rincian_ids = $_POST['rincian_ids'] ?? [];
+
+            // Pecah rincian_ids flat menjadi per-dosen.
+            // Jika total rincian_ids tidak habis dibagi n_dosen, pakai fallback.
+            $rids_per_row = ($n_dosen > 0 && count($rincian_ids) > 0)
+                ? (int)ceil(count($rincian_ids) / $n_dosen)
+                : 0;
+
+            // Counter kemunculan per rid (untuk indexing array qty/tarif/kompId)
+            $rid_counter = [];
 
             $conn->query("START TRANSACTION");
             $conn->query("DELETE FROM honor_generate_detail WHERE generate_id=$gen_id");
@@ -381,38 +397,47 @@ try {
             $total_all = 0;
             $err_msg   = null;
 
-            for ($i = 0; $i < count($dosen_ids); $i++) {
+            for ($i = 0; $i < $n_dosen; $i++) {
                 $did = (int)$dosen_ids[$i];
                 if ($did <= 0) continue;
 
-                $prodi_val  = esc($conn, $_POST['teks_prodi'][$i] ?? '');
-                $mk_val     = esc($conn, $_POST['teks_mata_kuliah'][$i] ?? '');
-                $pajak_pct  = (float)($_POST['pajak_pct'][$i] ?? 0);
+                $prodi_val = esc($conn, $_POST['teks_prodi'][$i]       ?? '');
+                $mk_val    = esc($conn, $_POST['teks_mata_kuliah'][$i]  ?? '');
+                $jabatan_val = esc($conn, $_POST['teks_jabatan'][$i]    ?? '');
+                $pajak_pct   = (float)($_POST['pajak_pct'][$i]          ?? 0);
 
-                // Looping semua rincian untuk dosen ini
-                // rincian_ids adalah array flat dari semua hidden input[name="rincian_ids[]"]
-                // Karena tiap dosen punya set rincian yang sama, kita ambil unique rid
-                $rids_unique = array_unique($rincian_ids);
-                foreach ($rids_unique as $rid) {
+                // Slice rincian_ids untuk dosen ini
+                if ($rids_per_row > 0) {
+                    $row_rids = array_slice($rincian_ids, $i * $rids_per_row, $rids_per_row);
+                } else {
+                    $row_rids = array_unique($rincian_ids);
+                }
+
+                foreach ($row_rids as $rid) {
                     $rid = (int)$rid;
                     if ($rid <= 0) continue;
 
-                    $qty_arr  = $_POST["komp_qty_{$rid}"] ?? [];
-                    $trf_arr  = $_POST["komp_tarif_{$rid}"] ?? [];
-                    $kid_arr  = $_POST["komp_kompId_{$rid}"] ?? [];
+                    // Hitung kemunculan ke-berapa rid ini
+                    if (!isset($rid_counter[$rid])) $rid_counter[$rid] = 0;
+                    $occ = $rid_counter[$rid];
+                    $rid_counter[$rid]++;
 
-                    $qty   = (float)($qty_arr[$i] ?? 0);
-                    $tarif = cleanRp($trf_arr[$i] ?? 0);
-                    $k_id  = (int)($kid_arr[$i] ?? 0);
+                    $qty_arr = $_POST["komp_qty_{$rid}"]    ?? [];
+                    $trf_arr = $_POST["komp_tarif_{$rid}"]  ?? [];
+                    $kid_arr = $_POST["komp_kompId_{$rid}"] ?? [];
 
-                    if ($qty <= 0) continue; // Skip baris kosong
+                    $qty   = (float)($qty_arr[$occ]  ?? 0);
+                    $tarif = cleanRp($trf_arr[$occ]   ?? 0);
+                    $k_id  = (int)($kid_arr[$occ]     ?? 0);
+
+                    if ($qty <= 0) continue; // skip baris kosong
 
                     $bruto    = $qty * $tarif;
-                    $potongan = $bruto * ($pajak_pct / 100);
+                    $potongan = round($bruto * ($pajak_pct / 100), 2);
                     $netto    = $bruto - $potongan;
                     $total_all += $netto;
 
-                    $q_ins = "INSERT INTO honor_generate_detail 
+                    $q_ins = "INSERT INTO honor_generate_detail
                         (generate_id,dosen_id,prodi,komponen_id,mata_kuliah,rincian_komponen_id,qty,tarif,total_honor,persen_pajak,potongan_pajak,honor_diterima,status_bayar,status_kirim)
                         VALUES ($gen_id,$did,'$prodi_val',$k_id,'$mk_val',$rid,$qty,$tarif,$bruto,$pajak_pct,$potongan,$netto,'Belum Dibayar','Belum Dikirim')";
 
