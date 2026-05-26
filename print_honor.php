@@ -14,7 +14,7 @@ $gen_id = (int)($_GET['gen_id'] ?? 0);
 
 if ($gen_id <= 0) die("<h3 style='padding: 50px;'>Parameter tidak valid.</h3>");
 
-$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun, 
+$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun, g.judul_honor, g.periode_semester,
         ds.nama as dosen_nama, ds.jabatan_fungsional as jabatan, ds.program_studi as default_prodi,
         t.custom_layout, t.nama_template
         FROM honor_generate_detail d
@@ -24,6 +24,10 @@ $sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun,
         WHERE d.generate_id = $gen_id ORDER BY d.dosen_id ASC, d.id ASC";
 $res = $conn->query($sql);
 
+if (!$res) {
+    die("<h3 style='padding:50px;color:red;'>Query Error: " . htmlspecialchars($conn->error) . "</h3>");
+}
+
 $matrix = [];
 $dosen = [];
 $t_bruto = 0; $t_pajak = 0;
@@ -31,6 +35,12 @@ $t_bruto = 0; $t_pajak = 0;
 $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $layout_json = '';
 $nama_template_doc = '';
+$judul_honor_doc = '';
+$periode_semester_doc = '';
+
+if ($res->num_rows === 0) {
+    die("<h3 style='padding:50px;color:orange;'>Data tidak ditemukan untuk Generate ID: $gen_id. Pastikan data honor sudah disimpan.</h3>");
+}
 
 while($r = $res->fetch_assoc()) {
     $nama_gen_clean = strtoupper($r['nama_generate']);
@@ -59,8 +69,18 @@ while($r = $res->fetch_assoc()) {
     if (empty($dosen)) { $dosen = [ 'nama' => 'PENGELOLA KEUANGAN', 'periode' => $nm_bln[$r['periode_bulan']] . ' ' . $r['periode_tahun'] ]; }
     $layout_json = $r['custom_layout'] ?? '';
     $nama_template_doc = $r['nama_template'] ?? '';
+    $judul_honor_doc = $r['judul_honor'] ?? '';
+    $periode_semester_doc = $r['periode_semester'] ?? '';
     
-    $t_bruto += (double)$r['total_honor']; $t_pajak += (double)$r['potongan_pajak'];
+}
+
+// Hitung total dari matrix (lebih akurat, hindari duplikasi per baris komponen)
+$t_bruto = 0; $t_pajak = 0;
+foreach ($matrix as $gen_items) {
+    foreach ($gen_items as $item) {
+        $t_bruto += (double)$item['tot_bruto'];
+        $t_pajak += (double)$item['tot_pajak'];
+    }
 }
 $t_netto = $t_bruto - $t_pajak;
 
@@ -86,9 +106,9 @@ foreach($layout_cols as $c) {
 }
 
 // MEMBANGUN HEADER THEAD
-$th_row1 = "<th rowspan='2' width='3%'>No</th>";
+$th_row1 = "<th rowspan='2' width='3%'>No</th><th rowspan='2' style='min-width:160px;'>NAMA DOSEN</th>";
 $th_row2 = "";
-$col_count = 1;
+$col_count = 2;
 
 foreach ($teks_cols as $t) { $th_row1 .= "<th rowspan='2'>".strtoupper($t['label'])."</th>"; $col_count++; }
 
@@ -159,12 +179,13 @@ if (empty($signatures)) {
         .kop-text { flex:1; text-align:center; }
         .kop-text .kop-nama { font-size:16pt; font-weight:900; letter-spacing:1px; margin-bottom:4px; text-transform: uppercase; }
         .kop-text .kop-alamat { font-size:11pt; line-height:1.5; }
+        .kop-text .kop-judul { font-size:13pt; font-weight:900; text-transform:uppercase; margin-top:5px; letter-spacing:0.5px; }
+        .kop-text .kop-periode-smt { font-size:11pt; font-weight:700; margin-top:2px; }
 
         .doc-sub { text-align: left; font-size: 11pt; margin-bottom: 5mm; }
         .tbl-data { width: 100%; border-collapse: collapse; margin-bottom: 8mm; font-size: 9pt; }
         .tbl-data th, .tbl-data td { border: 1px solid #000; padding: 6px; vertical-align: middle; }
         .tbl-data th { background-color: #f1f5f9 !important; text-transform: uppercase; font-size: 8pt; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: bold; }
-        .group-title { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2mm; margin-top: 5mm; color: #000;}
         .text-center { text-align: center; } .text-end { text-align: right; } .text-start { text-align: left; } .fw-bold { font-weight: bold; }
         
         /* ─── TANDA TANGAN ─── */
@@ -188,14 +209,17 @@ if (empty($signatures)) {
             <div class="kop-logo"><?= $logo_img ?></div>
             <div class="kop-text">
                 <div class="kop-nama"><?= $inst_name ?></div>
-                <div class="kop-alamat">LAPORAN PENGAJUAN: <?= htmlspecialchars($nama_template_doc) ?></div>
+                <?php if(!empty($judul_honor_doc)): ?>
+                <div class="kop-judul"><?= htmlspecialchars($judul_honor_doc) ?></div>
+                <?php endif; ?>
+                <?php if(!empty($periode_semester_doc)): ?>
+                <div class="kop-periode-smt"><?= htmlspecialchars($periode_semester_doc) ?></div>
+                <?php endif; ?>
+                <div class="kop-alamat">Periode: <?= strtoupper($dosen['periode'] ?? '') ?></div>
             </div>
         </div>
-
-        <div class="doc-sub fw-bold">Periode Laporan: <?= strtoupper($dosen['periode'] ?? '') ?></div>
         
         <?php foreach($matrix as $nama_gen => $items): ?>
-            <div class="group-title"><?= htmlspecialchars($nama_gen) ?></div>
             <table class="tbl-data">
                 <thead>
                     <tr><?= $th_row1 ?></tr>
@@ -219,6 +243,7 @@ if (empty($signatures)) {
                             // CETAK BARIS PERTAMA (Teks & Horizontal Cols)
                             if ($vi === 0) {
                                 echo "<td class='text-center' rowspan='".($has_vert ? ($rs + 1) : $rs)."'>" . $n++ . "</td>";
+                                echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-start fw-bold'>".htmlspecialchars($i['dosen_nama'] ?? '-')."</td>";
                                 
                                 foreach ($teks_cols as $t) {
                                     // FIX: map source ke field yang benar di matrix $i
@@ -309,7 +334,7 @@ if (empty($signatures)) {
                 </tbody>
                 <tfoot class="fw-bold" style="background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                     <tr>
-                        <td colspan="<?= $col_count ?>" class="text-end">SUBTOTAL <?= htmlspecialchars($nama_gen) ?></td>
+                        <td colspan="<?= $col_count ?>" class="text-end">SUBTOTAL HONOR</td>
                         <td class="text-end"><?= number_format($sub_bruto, 0, ',', '.') ?></td>
                         <td class="text-end text-danger">- <?= number_format($sub_pajak, 0, ',', '.') ?></td>
                         <td class="text-end" style="background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;">Rp <?= number_format($sub_netto, 0, ',', '.') ?></td>
