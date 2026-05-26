@@ -8,28 +8,50 @@
  * $active_subtab diteruskan dari honorarium.php ('pengajuan' | 'kuitansi')
  */
 
-// ── Ambil semua template dipisah per jenis ──────────────────────────
-$tpl_pengajuan = $conn->query(
-    "SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC"
-)->fetch_all(MYSQLI_ASSOC);
+// ── AUTO-CREATE tabel honor_template jika belum ada ─────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS honor_template (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama_template VARCHAR(150) NOT NULL,
+    jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN',
+    custom_layout MEDIUMTEXT NULL,
+    linked_pengajuan_template_id INT NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-$tpl_kuitansi = $conn->query(
+// Pastikan kolom linked_pengajuan_template_id ada (ALTER jika belum)
+$_cols_tpl = [];
+$_res_tpl_cols = $conn->query("SHOW COLUMNS FROM honor_template");
+if ($_res_tpl_cols) { while ($_rc = $_res_tpl_cols->fetch_assoc()) $_cols_tpl[] = $_rc['Field']; }
+if (!in_array('linked_pengajuan_template_id', $_cols_tpl))
+    $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
+if (!in_array('jenis_tujuan', $_cols_tpl))
+    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+
+// ── Ambil semua template dipisah per jenis ──────────────────────────
+$tpl_pengajuan = [];
+$_res_tpl_p = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC");
+if ($_res_tpl_p) $tpl_pengajuan = $_res_tpl_p->fetch_all(MYSQLI_ASSOC);
+
+$tpl_kuitansi = [];
+$_res_tpl_k = $conn->query(
     "SELECT t.*, p.nama_template AS nama_pengajuan_acuan
      FROM honor_template t
      LEFT JOIN honor_template p ON t.linked_pengajuan_template_id = p.id
      WHERE t.jenis_tujuan='KUITANSI'
      ORDER BY t.id ASC"
-)->fetch_all(MYSQLI_ASSOC);
+);
+if ($_res_tpl_k) $tpl_kuitansi = $_res_tpl_k->fetch_all(MYSQLI_ASSOC);
 
 // ── Daftar komponen aktif untuk builder ────────────────────────────
 $master_komponen = [];
 $res_mk = $conn->query("SELECT * FROM honor_komponen WHERE is_active=1 ORDER BY nama_honor ASC");
 if ($res_mk) {
     while ($mk = $res_mk->fetch_assoc()) {
-        $details = $conn->query(
+        $_res_det = $conn->query(
             "SELECT id,rincian,jabatan_fungsional,besaran,potongan_pajak
              FROM honor_komponen_detail WHERE komponen_id={$mk['id']} ORDER BY id ASC"
-        )->fetch_all(MYSQLI_ASSOC);
+        );
+        $details = $_res_det ? $_res_det->fetch_all(MYSQLI_ASSOC) : [];
         $mk['details'] = $details;
         $master_komponen[$mk['id']] = $mk;
     }
@@ -122,7 +144,6 @@ function renderPreviewTable($layout_json) {
     echo '<td class="text-center text-muted" style="background:#f8f9fa;">0</td>';
     echo '<td class="text-center fw-bold" style="background:#d1fae5;color:#065f46;">0</td>';
     echo '</tr></tbody></table></div>';
-    <?php
     return ob_get_clean();
 }
 
@@ -141,10 +162,9 @@ function renderPreviewTable($layout_json) {
     .step-badge { width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0; }
     /* Info-box kuitansi */
     .sync-info-box { background:linear-gradient(135deg,#eff6ff 0%,#f0fdf4 100%); border:1px solid #bfdbfe; border-left:5px solid #0d6efd; border-radius:12px; }
-    /* Komponen locked (readonly di kuitansi) */
-    .locked-komponen .b-rincian { pointer-events:none; opacity:0.75; background:#f1f5f9; }
-    .locked-komponen .btn-del-item { display:none !important; }
-    .locked-komponen .btn-add-item { display:none !important; }
+    /* Komponen locked (readonly di kuitansi) — hanya dropdown rincian yg dikunci */
+    .locked-rincian { pointer-events:none; opacity:0.8; background:#f8f9fa !important; border-color:#e2e8f0 !important; }
+    .locked-komponen-badge { font-size:10px; }
 </style>
 
 <div class="animate__animated animate__fadeIn">
@@ -366,6 +386,10 @@ function renderPreviewTable($layout_json) {
                 Komponen rincian akan dikunci dari template ini agar data sinkron.
             </div>
           </div>
+          <!-- INFO: daftar komponen yang terkunci -->
+          <div class="col-12 d-none" id="lockedKompInfo"
+               style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:10px;padding:10px 14px;">
+          </div>
           <!-- Komponen Acuan — untuk Pengajuan tetap tampil manual -->
           <div class="col-md-4" id="colMasterKomp">
             <label class="form-label small fw-bold">Komponen Honor Acuan <span class="text-danger">*</span></label>
@@ -482,7 +506,9 @@ function handleLinkedPengajuanChange(sel) {
     document.getElementById('tplLinkedId').value = val;
     if (!val) {
         lockedComponents = [];
-        resetBuilder();
+        // Reset info badge
+        const info = document.getElementById('lockedKompInfo');
+        if (info) info.classList.add('d-none');
         return;
     }
     // Ambil layout dari data-layout attribute
@@ -490,25 +516,63 @@ function handleLinkedPengajuanChange(sel) {
     const layoutJson = opt.getAttribute('data-layout') || '[]';
     try {
         const layout = JSON.parse(layoutJson);
-        // Ekstrak semua komponen & komponen_id dari layout pengajuan
+        // Hanya ekstrak daftar rincian komponen yang dikunci (bukan struktur layout-nya)
         lockedComponents = layout.filter(l => l.type === 'komponen');
-        // Otomatis set master komp dari rincian pertama
+        // Set master komp dari rincian pertama (untuk dropdown di builder)
         if (lockedComponents.length > 0) {
             const firstRid = lockedComponents[0].id_rincian;
             const mkId     = rincianToMaster[firstRid] || '';
             document.getElementById('inpMasterKomp').value = mkId;
         }
-        // Rebuild builder dengan layout pengajuan acuan
-        autoFillBuilderFromPengajuan(layout);
+        // Tampilkan info komponen yang terkunci
+        showLockedKompInfo(lockedComponents);
+        // TIDAK auto-rebuild builder — user bebas menyusun layout kwitansinya sendiri
     } catch(e) {
         console.error('Gagal parse layout pengajuan acuan:', e);
     }
 }
 
-/* ── Auto-isi builder dari layout template pengajuan acuan ─── */
+/* ── Tampilkan info daftar komponen yang terkunci ──────────── */
+function showLockedKompInfo(comps) {
+    const info = document.getElementById('lockedKompInfo');
+    if (!info) return;
+    if (!comps || comps.length === 0) { info.classList.add('d-none'); return; }
+
+    // Kumpulkan nama rincian unik
+    const uniqueRids = {};
+    comps.forEach(c => {
+        if (!uniqueRids[c.id_rincian]) {
+            // Cari nama dari dbMasterKomp
+            let nama = c.label || '';
+            for (const mk of Object.values(dbMasterKomp)) {
+                const found = mk.details.find(d => String(d.id) === String(c.id_rincian));
+                if (found) { nama = found.rincian; break; }
+            }
+            uniqueRids[c.id_rincian] = nama;
+        }
+    });
+
+    const badges = Object.entries(uniqueRids).map(([rid, nama]) =>
+        `<span class="badge bg-light text-dark border me-1 mb-1" data-rid="${rid}">
+            <i class="fas fa-lock text-warning me-1" style="font-size:10px;"></i>${nama}
+        </span>`
+    ).join('');
+
+    info.innerHTML = `
+        <i class="fas fa-lock text-warning me-2"></i>
+        <span class="fw-bold small me-2">Komponen dikunci dari pengajuan acuan:</span>
+        <span class="small">${badges}</span>
+        <br><span class="small text-muted mt-1 d-block">
+            <i class="fas fa-info-circle me-1"></i>
+            Susun layout kwitansi bebas (horizontal/vertikal) — hanya rincian komponen di atas yang bisa dipilih.
+        </span>`;
+    info.classList.remove('d-none');
+}
+
+/* ── (Tidak dipakai lagi, diganti showLockedKompInfo) ─────── */
 function autoFillBuilderFromPengajuan(layout) {
+    // Fungsi ini dipertahankan untuk kompatibilitas editTemplate lama
     resetBuilder();
-    // Re-group layout
     const standaloneTeks = [];
     const groups_vert    = {};
     const groups_horiz   = {};
@@ -525,25 +589,6 @@ function autoFillBuilderFromPengajuan(layout) {
     standaloneTeks.forEach(l => addBlock('teks', l));
     for (const k in groups_vert)  addBlock('group_vertical',   groups_vert[k]);
     for (const k in groups_horiz) addBlock('group_horizontal', groups_horiz[k]);
-
-    // Kunci semua item komponen (readonly di mode kuitansi)
-    if (isKuitansiMode) lockKomponenInBuilder();
-}
-
-/* ── Kunci semua item komponen di builder ──────────────────── */
-function lockKomponenInBuilder() {
-    document.querySelectorAll('#builderContainer .b-card').forEach(card => {
-        if (card.getAttribute('data-type') !== 'teks') {
-            card.classList.add('locked-komponen');
-            // Tambahkan overlay info
-            if (!card.querySelector('.lock-notice')) {
-                const notice = document.createElement('div');
-                notice.className = 'lock-notice alert alert-info py-1 px-3 mb-2 small fw-bold';
-                notice.innerHTML = '<i class="fas fa-lock me-1"></i> Komponen dikunci — mengikuti Template Pengajuan acuan';
-                card.querySelector('.b-items-container')?.before(notice);
-            }
-        }
-    });
 }
 
 /* ── Reset builder ─────────────────────────────────────────── */
@@ -551,7 +596,7 @@ function resetBuilder() {
     document.getElementById('builderContainer').innerHTML =
         '<div class="text-center py-5 text-muted fst-italic" id="emptyStateMsg">' +
         (isKuitansiMode
-            ? 'Pilih <b>Template Pengajuan Acuan</b> di atas untuk mengisi komponen secara otomatis.'
+            ? 'Klik <b>+ TAMBAH ELEMEN</b> untuk menyusun layout kwitansi (horizontal/vertikal bebas).'
             : 'Pilih <b>Komponen Honor Acuan</b> di atas untuk mulai menyusun form.')
         + '</div>';
     bCount = 0;
@@ -578,24 +623,34 @@ function getSourceDropdown(type, val) {
     } else {
         const mkId = document.getElementById('inpMasterKomp').value;
         let opts = '<option value="">-- Pilih Rincian Komponen --</option>';
-        if (mkId && dbMasterKomp[mkId]) {
+
+        if (isKuitansiMode && lockedComponents.length > 0) {
+            // Mode kuitansi: HANYA tampilkan rincian yang ada di locked list (dari pengajuan acuan)
+            const seen = {};
+            lockedComponents.forEach(c => {
+                if (seen[c.id_rincian]) return;
+                seen[c.id_rincian] = true;
+                // Cari nama & besaran dari master
+                let nama = c.label || '';
+                let besaran = 0;
+                for (const mk of Object.values(dbMasterKomp)) {
+                    const found = mk.details.find(d => String(d.id) === String(c.id_rincian));
+                    if (found) { nama = found.rincian; besaran = found.besaran; break; }
+                }
+                const sel = (String(val) === String(c.id_rincian)) ? 'selected' : '';
+                opts += `<option value="${c.id_rincian}" data-nama="${nama}" ${sel}>${nama}${besaran ? ' (Rp ' + new Intl.NumberFormat('id-ID').format(besaran) + ')' : ''}</option>`;
+            });
+            // Dropdown bisa dipilih tapi hanya dari opsi yang terkunci
+            return `<select class="form-select fw-bold border-warning shadow-sm b-rincian" required onchange="syncLabelKomponen(this)" title="Hanya komponen dari pengajuan acuan">${opts}</select>`;
+        } else if (mkId && dbMasterKomp[mkId]) {
             dbMasterKomp[mkId].details.forEach(r => {
                 const sel = (String(val) === String(r.id)) ? 'selected' : '';
                 opts += `<option value="${r.id}" data-nama="${r.rincian}" ${sel}>${r.rincian} (Rp ${new Intl.NumberFormat('id-ID').format(r.besaran)})</option>`;
             });
-        } else if (isKuitansiMode) {
-            // Mode kuitansi: tampilkan semua rincian dari semua komponen
-            for (const mk of Object.values(dbMasterKomp)) {
-                mk.details.forEach(r => {
-                    const sel = (String(val) === String(r.id)) ? 'selected' : '';
-                    opts += `<option value="${r.id}" data-nama="${r.rincian}" ${sel}>${mk.nama_honor} → ${r.rincian}</option>`;
-                });
-            }
         } else {
             opts = '<option value="">Pilih Master Komponen di atas terlebih dahulu</option>';
         }
-        const lockedAttr = (isKuitansiMode && lockedComponents.length > 0) ? 'disabled' : '';
-        return `<select class="form-select fw-bold border-success shadow-sm b-rincian" required onchange="syncLabelKomponen(this)" ${lockedAttr}>${opts}</select>`;
+        return `<select class="form-select fw-bold border-success shadow-sm b-rincian" required onchange="syncLabelKomponen(this)">${opts}</select>`;
     }
 }
 
@@ -630,6 +685,10 @@ function addBlock(type, data = null) {
     const mkId = document.getElementById('inpMasterKomp').value;
     if (!mkId && type !== 'teks' && !isKuitansiMode) {
         Swal.fire('Peringatan', 'Silakan pilih <b>Komponen Honor Acuan</b> terlebih dahulu!', 'warning');
+        return;
+    }
+    if (!mkId && type !== 'teks' && isKuitansiMode && lockedComponents.length === 0) {
+        Swal.fire('Peringatan', 'Silakan pilih <b>Template Pengajuan Acuan</b> terlebih dahulu!', 'warning');
         return;
     }
     bCount++;
@@ -722,7 +781,6 @@ function addBlock(type, data = null) {
     } else if (type.includes('group')) {
         addItemToGroup(bCount, (type==='group_vertical'?'success':'primary'));
     }
-    if (isKuitansiMode) lockKomponenInBuilder();
 }
 
 function addItemToGroup(blockId, colorClass, data = null) {
@@ -755,6 +813,9 @@ function openModalTemplate(jenis) {
     document.getElementById('selLinkedPengajuan').value = '';
     document.getElementById('inpMasterKomp').value = '';
     lockedComponents = [];
+    // Sembunyikan info locked komp
+    const info = document.getElementById('lockedKompInfo');
+    if (info) info.classList.add('d-none');
     setModalMode(jenis);
     resetBuilder();
     const title = jenis === 'KUITANSI'
@@ -775,13 +836,42 @@ function editTemplate(d, jenis) {
         const linkedId = d.linked_pengajuan_template_id || '';
         document.getElementById('tplLinkedId').value       = linkedId;
         document.getElementById('selLinkedPengajuan').value = linkedId;
-        // Set komponen acuan
+        // Set lockedComponents dari layout pengajuan acuan (tanpa rebuild builder)
         if (linkedId) {
             const selLinked = document.getElementById('selLinkedPengajuan');
-            handleLinkedPengajuanChange(selLinked);
-        } else {
-            resetBuilder();
+            const opt = selLinked.options[selLinked.selectedIndex];
+            if (opt && opt.value) {
+                const layoutJson = opt.getAttribute('data-layout') || '[]';
+                try {
+                    const layoutPeng = JSON.parse(layoutJson);
+                    lockedComponents = layoutPeng.filter(l => l.type === 'komponen');
+                    if (lockedComponents.length > 0) {
+                        const firstRid = lockedComponents[0].id_rincian;
+                        const mkId = rincianToMaster[firstRid] || '';
+                        document.getElementById('inpMasterKomp').value = mkId;
+                    }
+                    showLockedKompInfo(lockedComponents);
+                } catch(e) {}
+            }
         }
+        // Rebuild layout KWITANSI yang tersimpan (layout kwitansi sendiri, bukan pengajuan)
+        document.getElementById('builderContainer').innerHTML = '';
+        bCount = 0;
+        const layout = JSON.parse(d.custom_layout || '[]');
+        const gVert = {}; const gHoriz = {}; const teks = [];
+        layout.forEach(l => {
+            if (l.type === 'teks') { teks.push(l); }
+            else if (l.group_type === 'group_vertical') {
+                if (!gVert[l.group]) gVert[l.group] = { name: l.group, header: l.group_header||'URAIAN', is_jafung: l.is_jafung||false, items: [] };
+                gVert[l.group].items.push(l);
+            } else {
+                if (!gHoriz[l.group]) gHoriz[l.group] = { name: l.group, header: l.group_header||'', is_jafung: l.is_jafung||false, items: [] };
+                gHoriz[l.group].items.push(l);
+            }
+        });
+        teks.forEach(l => addBlock('teks', l));
+        for (const k in gVert)  addBlock('group_vertical',   gVert[k]);
+        for (const k in gHoriz) addBlock('group_horizontal', gHoriz[k]);
     } else {
         // Mode PENGAJUAN: isi master komp dari layout
         let mkId = '';
