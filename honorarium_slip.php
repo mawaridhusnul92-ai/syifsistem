@@ -21,25 +21,59 @@ if ($filter_tahun < 2000 || $filter_tahun > 2100) $filter_tahun = (int)date('Y')
 // ── PENDEKATAN BARU: Tampilkan slip dari generate yang pakai template PENGAJUAN
 // (atau generate tanpa template). Template KUITANSI ter-link otomatis dari sana.
 // Untuk cetak kuitansi: cari template kuitansi yang linked_pengajuan_template_id = template generate tersebut.
+
+// Guard: pastikan kolom jenis_tujuan ada sebelum dipakai di WHERE
+$_slip_cols_tpl = [];
+$_rs_show = $conn->query("SHOW COLUMNS FROM honor_template");
+if ($_rs_show) { while ($_rc = $_rs_show->fetch_assoc()) $_slip_cols_tpl[] = $_rc['Field']; }
+$has_jenis_tujuan     = in_array('jenis_tujuan', $_slip_cols_tpl);
+$has_linked_pengajuan = in_array('linked_pengajuan_template_id', $_slip_cols_tpl);
+
+// Tambahkan kolom yang belum ada
+if (!$has_jenis_tujuan) {
+    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+    $has_jenis_tujuan = true;
+}
+if (!$has_linked_pengajuan) {
+    $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
+    $has_linked_pengajuan = true;
+}
+
 $valid_gen_ids = [];
-$res_gids = $conn->query(
-    "SELECT g.id FROM honor_generate g
-     LEFT JOIN honor_template t ON g.template_id = t.id
-     WHERE g.status IN ('Final','Dibayarkan')
-       AND g.periode_bulan = $filter_bulan
-       AND g.periode_tahun = $filter_tahun
-       AND (t.jenis_tujuan = 'PENGAJUAN' OR g.template_id IS NULL OR t.id IS NULL)"
-);
+if ($has_jenis_tujuan) {
+    $res_gids = $conn->query(
+        "SELECT g.id FROM honor_generate g
+         LEFT JOIN honor_template t ON g.template_id = t.id
+         WHERE g.status IN ('Final','Dibayarkan')
+           AND g.periode_bulan = $filter_bulan
+           AND g.periode_tahun = $filter_tahun
+           AND (t.jenis_tujuan = 'PENGAJUAN' OR g.template_id IS NULL OR t.id IS NULL)"
+    );
+} else {
+    // Fallback: ambil semua generate Final/Dibayarkan di periode ini
+    $res_gids = $conn->query(
+        "SELECT g.id FROM honor_generate g
+         WHERE g.status IN ('Final','Dibayarkan')
+           AND g.periode_bulan = $filter_bulan
+           AND g.periode_tahun = $filter_tahun"
+    );
+}
 if ($res_gids) {
     while ($row = $res_gids->fetch_assoc()) $valid_gen_ids[] = (int)$row['id'];
 }
 
 // Ambil template kuitansi yang tersedia per template pengajuan (untuk tombol cetak kuitansi)
 $kuitansi_tpl_map = []; // [pengajuan_template_id => kuitansi_template_id]
-$res_ktpl = $conn->query("SELECT id, linked_pengajuan_template_id FROM honor_template WHERE jenis_tujuan='KUITANSI' AND linked_pengajuan_template_id IS NOT NULL");
-if ($res_ktpl) {
-    while ($rk = $res_ktpl->fetch_assoc()) {
-        $kuitansi_tpl_map[(int)$rk['linked_pengajuan_template_id']] = (int)$rk['id'];
+// Guard: cek kolom dulu sebelum query agar tidak crash jika kolom belum ada
+$_cols_honor_tpl = [];
+$_rcols = $conn->query("SHOW COLUMNS FROM honor_template");
+if ($_rcols) { while ($_rc = $_rcols->fetch_assoc()) $_cols_honor_tpl[] = $_rc['Field']; }
+if (in_array('linked_pengajuan_template_id', $_cols_honor_tpl)) {
+    $res_ktpl = $conn->query("SELECT id, linked_pengajuan_template_id FROM honor_template WHERE jenis_tujuan='KUITANSI' AND linked_pengajuan_template_id IS NOT NULL");
+    if ($res_ktpl) {
+        while ($rk = $res_ktpl->fetch_assoc()) {
+            $kuitansi_tpl_map[(int)$rk['linked_pengajuan_template_id']] = (int)$rk['id'];
+        }
     }
 }
 

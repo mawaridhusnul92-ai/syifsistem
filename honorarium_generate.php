@@ -169,7 +169,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                         <div class="col-6">
                             <label class="form-label small fw-bold text-muted">Bulan Periode <span class="text-danger">*</span></label>
                             <select name="bulan" id="inpBlnGen" class="form-select rounded-3 border fw-bold" required>
-                                <?php $nb = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]; foreach($nb as $idx => $b) { if($idx==0) continue; echo "<option value='$idx'>$b</option>"; } ?>
+                                <?php $nb = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]; foreach($nb as $idx => $b) { echo "<option value='".($idx+1)."'>$b</option>"; } ?>
                             </select>
                         </div>
                         <div class="col-6">

@@ -8,18 +8,31 @@
  * $active_subtab diteruskan dari honorarium.php ('pengajuan' | 'kuitansi')
  */
 
+// ── Auto-tambah kolom jika belum ada (guard agar tidak error saat query) ──
+$_cols_tpl = [];
+$_res_show = $conn->query("SHOW COLUMNS FROM honor_template");
+if ($_res_show) { while ($_rc = $_res_show->fetch_assoc()) $_cols_tpl[] = $_rc['Field']; }
+if (!in_array('linked_pengajuan_template_id', $_cols_tpl)) {
+    $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
+}
+if (!in_array('jenis_tujuan', $_cols_tpl)) {
+    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+}
+
 // ── Ambil semua template dipisah per jenis ──────────────────────────
 $tpl_pengajuan = $conn->query(
     "SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC"
 )->fetch_all(MYSQLI_ASSOC);
 
-$tpl_kuitansi = $conn->query(
+// Query kuitansi — gunakan CASE agar tidak crash jika kolom linked baru saja ditambah
+$_res_ktpl = $conn->query(
     "SELECT t.*, p.nama_template AS nama_pengajuan_acuan
      FROM honor_template t
      LEFT JOIN honor_template p ON t.linked_pengajuan_template_id = p.id
      WHERE t.jenis_tujuan='KUITANSI'
      ORDER BY t.id ASC"
-)->fetch_all(MYSQLI_ASSOC);
+);
+$tpl_kuitansi = $_res_ktpl ? $_res_ktpl->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Daftar komponen aktif untuk builder ────────────────────────────
 $master_komponen = [];
