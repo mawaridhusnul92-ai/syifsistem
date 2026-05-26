@@ -176,6 +176,24 @@ if (empty($signatures)) {
     ];
 }
 
+// Cari "Dibuat Oleh" dari signatures untuk bagian "Dari:" di kop kuitansi
+$dari_text = 'Bendahara Pengelolaan ' . $inst_name;
+foreach ($signatures as $sig) {
+    if (stripos($sig['sign_role'], 'Dibuat Oleh') !== false || stripos($sig['sign_position'], 'Bendahara') !== false) {
+        $dari_label = !empty($sig['sign_position']) ? $sig['sign_position'] : $sig['sign_role'];
+        $dari_nama  = $sig['sign_name'];
+        if (!empty($dari_nama) && $dari_nama !== '[NAMA_DOSEN]') {
+            $dari_text = trim(str_replace(['Dibuat Oleh,', 'Dibuat Oleh'], '', $dari_label)) ?: $dari_nama;
+            if (!empty(trim($dari_label, ', '))) $dari_text = trim($dari_label, ', ');
+        }
+        break;
+    }
+}
+
+// Nama hari dalam Bahasa Indonesia
+$hari_id = ['Sunday'=>'Minggu','Monday'=>'Senin','Tuesday'=>'Selasa','Wednesday'=>'Rabu','Thursday'=>'Kamis','Friday'=>'Jumat','Saturday'=>'Sabtu'];
+$hari_ini = $hari_id[date('l')] ?? date('l');
+
 // ==========================================
 // HELPER FUNGSI
 // ==========================================
@@ -368,9 +386,9 @@ foreach ($slips as $did => $dosen_data):
         <div class="kop-kiri">
             <?= $logo_img ?>
             <div class="kop-teks">
-                Pada hari ini <b><?= date('l') ?></b>, tanggal <b><?= $tanggal_cetak ?></b>, telah ditransfer honorarium.<br>
+                Pada hari ini <b><?= $hari_ini ?></b>, tanggal <b><?= $tanggal_cetak ?></b>, telah ditransfer honorarium.<br>
                 <table class="info-tbl">
-                    <tr><td width="70">Dari</td><td>: Bendahara Pengelolaan <?= $inst_name ?></td></tr>
+                    <tr><td width="70">Dari</td><td>: <?= htmlspecialchars($dari_text) ?></td></tr>
                     <tr><td>Kepada</td><td>: <b><?= htmlspecialchars($info['dosen_nama']) ?></b></td></tr>
                     <tr><td>Nominal</td><td>: <b>Rp <?= rp($dosen_data['grand_netto']) ?></b></td></tr>
                     <tr><td>Sejumlah</td><td>: <i><?= terbilang($dosen_data['grand_netto']) ?> Rupiah</i></td></tr>
