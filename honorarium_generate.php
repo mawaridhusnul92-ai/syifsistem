@@ -84,8 +84,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     .cell-qty { min-width: 70px; text-align: center; } .cell-nom { min-width: 120px; text-align: right; } .cell-tot { min-width: 120px; text-align: right; font-weight: 800; background: #f8fafc; color: #0d6efd; white-space: nowrap; }
     .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; min-width: 120px; display: block; }
     .btn-action { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px;}
-    tbody.honor-row[data-parent-id] > tr > td { background: #f8fff8 !important; }
-    tbody.honor-row[data-parent-id] > tr:first-child > td:first-child { border-left: 3px solid #22c55e; }
+    tbody.honor-row[data-sub-row] > tr > td { background: #f8fff8 !important; }
+    tbody.honor-row[data-sub-row] > tr:first-child > td:first-child { border-left: 3px solid #22c55e; }
+    tbody.honor-row tr[data-sub-id] > td { background: #f8fff8 !important; }
+    tbody.honor-row tr[data-sub-id]:first-of-type > td:first-child { border-left: 3px solid #22c55e; }
     .inp-jml-display { text-align: right; font-weight: 700; color: #0d6efd; background: transparent; border: none; width: 100%; padding: 0; }
     /* ── Hilangkan spinner (tanda panah atas/bawah) pada input number ── */
     input.inp-qty::-webkit-outer-spin-button,
@@ -1038,8 +1040,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     //  delHonorRow & reindexRows
     // ================================================================
     function delHonorRow(id) {
-        // Hapus sub-row yang terikat ke baris ini terlebih dahulu
-        document.querySelectorAll(`#tblHonorDetail tbody.honor-row[data-parent-id="${id}"]`).forEach(el => el.remove());
+        // Hapus seluruh tbody dosen (berisi semua mata kuliah)
         const el = document.getElementById('hr_' + id);
         if (el) el.remove();
         reindexRows();
@@ -1049,163 +1050,98 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     function reindexRows() {
         let idx = 1;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
-            // Hanya baris induk (tidak punya data-parent-id) yang dapat nomor urut
-            if (!tbody.dataset.parentId) {
-                const tdNo = tbody.querySelector('.row-no');
-                if (tdNo) tdNo.innerText = idx++;
-            }
+            const tdNo = tbody.querySelector('.row-no');
+            if (tdNo) tdNo.innerText = idx++;
         });
     }
-
     // ================================================================
-    //  addSubRowSameDosen — Tambah baris baru di bawah dengan dosen SAMA
-    //  Cara kerja MERGE CELL:
-    //  1. td No & td Dosen di baris INDUK di-extend rowspan-nya (+rs)
-    //  2. Baris baru TIDAK punya td No/Dosen — cukup kolom komponen saja
-    //  3. Nomor tetap sama (misal 1), bukan 1a atau 2
-    //  4. Submit: dosen_id dan no baris disimpan via hidden input di tbody baru
+    //  addSubRowSameDosen — Tambah baris mata kuliah baru untuk dosen SAMA
+    //  Cara kerja BENAR (rowspan tidak bisa lintas tbody):
+    //  - Sub-row langsung ditambahkan sebagai <tr> baru di dalam tbody YANG SAMA
+    //  - td No & td Dosen di tr-1 di-extend rowspan-nya +1
+    //  - Kolom kanan (Total/Pajak/Potongan/Netto/Aksi) di tr-1 juga di-extend rowspan +1
+    //  - Sub-row HANYA berisi kolom: teks (prodi/matkul/jabatan) + komponen
     // ================================================================
     function addSubRowSameDosen(parentId) {
         const parentTbody = document.getElementById(`hr_${parentId}`);
         if (!parentTbody) return;
 
-        // Ambil data dosen dari baris induk
         const selDosenParent = parentTbody.querySelector('select[name="dosen_id[]"]');
         const dosenId = selDosenParent ? selDosenParent.value : '';
-        const dosenNama = selDosenParent ? (selDosenParent.options[selDosenParent.selectedIndex]?.text || '') : '';
-
         if (!dosenId) {
             Swal.fire('Peringatan', 'Pilih dosen terlebih dahulu sebelum menambah baris.', 'warning');
             return;
         }
 
-        // Ambil nilai jabatan dari baris induk
         const selJabatanParent = parentTbody.querySelector('select.inp-jabatan');
         const jabatan = selJabatanParent ? selJabatanParent.value : '';
-
-        // Ambil nilai pajak dari baris induk
-        const pajakParent = parentTbody.querySelector('.inp-pajak-pct');
-        const pajakVal = pajakParent ? pajakParent.value : '0';
-
-        // Ambil prodi dari baris induk
         const prodiInp = parentTbody.querySelector('input.inp-prodi');
         const prodiVal = prodiInp ? prodiInp.value : '';
+
+        const vItems = vertGroup.items || [];
+        // Jumlah <tr> yang akan ditambah untuk 1 sub-row mata kuliah
+        const addRs = vItems.length > 0 ? vItems.length : 1;
 
         rCount++;
         const newId = rCount;
 
-        const vItems   = vertGroup.items || [];
-        const rs       = vItems.length > 0 ? vItems.length : 1;
-
-        // ── EXTEND rowspan pada td No & td Dosen di baris INDUK ──────
-        // Kita simpan jumlah sub-row di dataset parentTbody
-        const prevSubRows = parseInt(parentTbody.dataset.subRowCount || '0');
-        parentTbody.dataset.subRowCount = prevSubRows + rs;
-
-        // td No: cari di tr pertama baris induk (kolom pertama)
-        const parentTr1 = parentTbody.querySelector('tr:first-child');
-        if (parentTr1) {
-            const tdNo    = parentTr1.querySelector('.row-no');
-            const tdDosen = parentTr1.querySelector('td:has(select[name="dosen_id[]"])') ||
-                            (tdNo ? tdNo.nextElementSibling : null);
-            if (tdNo)    tdNo.rowSpan    = (tdNo.rowSpan    || 1) + rs;
-            if (tdDosen) tdDosen.rowSpan = (tdDosen.rowSpan || 1) + rs;
-
-            // Juga extend semua td teks (prodi, matkul, jabatan) yg rowspan = total baris induk
-            // agar tetap ter-merge dengan benar
-            parentTr1.querySelectorAll('td[rowspan]').forEach(td => {
-                // Hanya extend td yang masih menjadi bagian dari "header" baris dosen
-                // (yaitu td yang rowspan-nya sama dengan jumlah sub-rows sebelumnya + rs induk)
-                // Kita gunakan pendekatan: td yang BUKAN td komponen (tidak punya data-role)
-                // Karena td No, Dosen, dan kolom teks tidak punya data-role
-                if (!td.dataset.role && td !== tdNo && td !== tdDosen) {
-                    // Hanya extend jika ini memang kolom teks dosen (bukan kolom komponen)
-                    // Cek: apakah posisi td ini sebelum kolom pertama yang punya data-role?
-                    const allTds = Array.from(parentTr1.cells);
-                    const firstRoleTdIdx = allTds.findIndex(t => t.dataset.role);
-                    const thisTdIdx = allTds.indexOf(td);
-                    if (firstRoleTdIdx === -1 || thisTdIdx < firstRoleTdIdx) {
-                        td.rowSpan = (td.rowSpan || 1) + rs;
-                    }
-                }
-            });
-
-            // Extend juga td Total, Pajak, Potongan, Netto, Aksi (kolom kanan)
-            // yang ada di tr1 baris induk dan memiliki rowspan
-            const rightCls = ['txt-total','txt-potongan','txt-netto'];
-            rightCls.forEach(cls => {
-                const td = parentTr1.querySelector(`.${cls}`);
-                if (td) td.rowSpan = (td.rowSpan || 1) + rs;
-            });
-            // td pajak & td aksi: cari lewat posisi (tidak punya class unik)
-            // Extend semua td dengan rowspan yang punya class text-center (aksi) atau punya inp-pajak-pct
-            parentTr1.querySelectorAll('td').forEach(td => {
-                if (td.querySelector('.inp-pajak-pct')) td.rowSpan = (td.rowSpan || 1) + rs;
-                if (td.classList.contains('text-center') && td.querySelector('.btn-action')) td.rowSpan = (td.rowSpan || 1) + rs;
+        // ── Extend rowspan semua td di tr-1 induk yang seharusnya mencakup sub-row ──
+        const tr1 = parentTbody.querySelector('tr:first-child');
+        if (tr1) {
+            // Semua td yang ada di tr1 dengan rowspan → tambah addRs
+            // kecuali td yang punya data-role (komponen), itu TIDAK di-extend
+            // karena komponen setiap baris mata kuliah berbeda
+            Array.from(tr1.cells).forEach(td => {
+                if (td.dataset.role) return; // komponen: skip
+                td.rowSpan = (td.rowSpan || 1) + addRs;
             });
         }
 
-        // Buat tbody baru (TANPA td No dan td Dosen — sudah di-merge di induk)
-        const tbody = document.createElement('tbody');
-        tbody.id        = `hr_${newId}`;
-        tbody.className = 'honor-row bg-white';
-        tbody.dataset.parentId = parentId;
-        // Hidden input untuk submit dosen_id (karena td dosen ada di baris induk)
-        const hidDosenId = document.createElement('input');
-        hidDosenId.type = 'hidden'; hidDosenId.name = 'dosen_id[]'; hidDosenId.value = dosenId;
-        tbody.appendChild(hidDosenId);
-
-        function mkTr() {
+        // ── Buat <tr> baru dan masukkan ke dalam tbody yang SAMA ──────
+        function mkSubTr() {
             const tr = document.createElement('tr');
-            tbody.appendChild(tr);
+            parentTbody.appendChild(tr);
             return tr;
         }
 
-        const tr1 = mkTr();
+        const subTr = mkSubTr();
 
-        // Kolom teks (prodi, matkul, jabatan) — baris baru punya kolom sendiri
-        // karena matkul beda. Prodi & jabatan auto-terisi dari baris induk.
+        // ── Kolom teks sub-row: prodi (teks), mata_kuliah (input), jabatan (teks) ──
         teksCols.forEach(c => {
             let val = '';
             if (c.source === 'prodi')   val = prodiVal;
             if (c.source === 'jabatan') val = jabatan;
 
-            const tdT = createCell('', { cls: 'align-middle', rowspan: rs });
+            const tdT = createCell('', { cls: 'align-middle' });
 
             if (c.source === 'jabatan') {
-                // Jabatan: tampilkan sebagai teks saja (sama dengan induk, tidak perlu diubah)
                 tdT.innerHTML = `<span class="text-dark fw-bold small px-2">${val || '&mdash;'}</span>`;
-                // Hidden input untuk submit
-                const hidJab = document.createElement('input');
-                hidJab.type = 'hidden'; hidJab.name = `teks_${c.source}[]`; hidJab.value = val;
-                tdT.appendChild(hidJab);
+                const h = document.createElement('input');
+                h.type = 'hidden'; h.name = `teks_${c.source}[]`; h.value = val;
+                tdT.appendChild(h);
             } else if (c.source === 'prodi') {
-                // Prodi: tampilkan sebagai teks saja (sama dengan induk)
                 tdT.innerHTML = `<span class="text-muted small px-2">${val || '&mdash;'}</span>`;
-                const hidProdi = document.createElement('input');
-                hidProdi.type = 'hidden'; hidProdi.name = `teks_${c.source}[]`; hidProdi.value = val;
-                tdT.appendChild(hidProdi);
+                const h = document.createElement('input');
+                h.type = 'hidden'; h.name = `teks_${c.source}[]`; h.value = val;
+                tdT.appendChild(h);
             } else {
-                // Mata kuliah: input kosong, siap diisi user
+                // mata kuliah — input kosong siap diisi
                 const inp = document.createElement('input');
-                inp.type  = 'text';
-                inp.name  = `teks_${c.source}[]`;
-                inp.value = val;
-                inp.className = 'inp-gen text-dark inp-teks-w';
-                inp.required = true;
+                inp.type = 'text'; inp.name = `teks_${c.source}[]`; inp.value = '';
+                inp.className = 'inp-gen text-dark inp-teks-w'; inp.required = true;
                 tdT.appendChild(inp);
             }
-            tr1.appendChild(tdT);
+            subTr.appendChild(tdT);
         });
 
-        // Kolom komponen horizontal — semua kosong (qty=0)
+        // ── Kolom komponen horizontal ─────────────────────────────────
         for (const g in horizGroups) {
             const firstItem  = horizGroups[g][0] || {};
             const gHeader    = firstItem.group_header || '';
             const gSingleCol = firstItem.single_jafung_col || false;
 
             if (gSingleCol) {
-                const items   = horizGroups[g];
+                const items = horizGroups[g];
                 let activeRid = items[0].id_rincian;
                 let activeData = masterTarif[activeRid] || null;
                 let t = activeData ? activeData.besaran : 0;
@@ -1216,158 +1152,152 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                         activeRid = String(jt.id); t = jt.besaran;
                     }
                 }
-                const inpHid = document.createElement('input');
-                inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
-                const inpGrpInfo = document.createElement('input');
-                inpGrpInfo.type = 'hidden'; inpGrpInfo.name = `single_col_group[]`; inpGrpInfo.value = g;
-                const inpQty = document.createElement('input');
-                inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`;
-                inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = 0; inpQty.step = '0.01'; inpQty.min = '0';
-                inpQty.oninput = inpQty.onchange = () => calcRow(newId);
-                const tdQ = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-qty' });
+                const iH = document.createElement('input');
+                iH.type = 'hidden'; iH.name = 'rincian_ids[]'; iH.value = activeRid;
+                const iGI = document.createElement('input');
+                iGI.type = 'hidden'; iGI.name = 'single_col_group[]'; iGI.value = g;
+                const iQ = document.createElement('input');
+                iQ.type = 'number'; iQ.name = `komp_qty_${activeRid}[]`;
+                iQ.className = 'inp-gen text-center inp-qty'; iQ.value = 0; iQ.step = '0.01'; iQ.min = '0';
+                iQ.oninput = iQ.onchange = () => calcRow(parentId);
+                const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: activeRid, dataRole: 'td-qty' });
                 tdQ.dataset.singleCol = 'true'; tdQ.dataset.groupName = g;
-                tdQ.appendChild(inpHid); tdQ.appendChild(inpGrpInfo); tdQ.appendChild(inpQty);
-                tr1.appendChild(tdQ);
-                const inpTrf = document.createElement('input');
-                inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`;
-                inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                const inpKid = document.createElement('input');
-                inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`; inpKid.value = activeData ? activeData.komp_id : 0;
-                const tdT2 = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-tarif' });
+                tdQ.appendChild(iH); tdQ.appendChild(iGI); tdQ.appendChild(iQ);
+                subTr.appendChild(tdQ);
+                const iT = document.createElement('input');
+                iT.type = 'text'; iT.name = `komp_tarif_${activeRid}[]`;
+                iT.className = 'inp-gen inp-nom inp-tarif'; iT.value = fmtRp(t);
+                iT.readOnly = true; iT.tabIndex = -1;
+                const iK = document.createElement('input');
+                iK.type = 'hidden'; iK.name = `komp_kompId_${activeRid}[]`; iK.value = activeData ? activeData.komp_id : 0;
+                const tdT2 = createCell('', { cls: 'cell-nom align-middle', dataRid: activeRid, dataRole: 'td-tarif' });
                 tdT2.dataset.singleCol = 'true'; tdT2.dataset.groupName = g;
-                tdT2.appendChild(inpTrf); tdT2.appendChild(inpKid); tr1.appendChild(tdT2);
-                const inpJml = document.createElement('input');
-                inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                const tdJ = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-jml' });
-                tdJ.dataset.singleCol = 'true'; tdJ.dataset.groupName = g; tdJ.appendChild(inpJml); tr1.appendChild(tdJ);
+                tdT2.appendChild(iT); tdT2.appendChild(iK); subTr.appendChild(tdT2);
+                const iJ = document.createElement('input');
+                iJ.type = 'text'; iJ.className = 'inp-gen inp-nom inp-jml-display'; iJ.value = '0'; iJ.readOnly = true; iJ.tabIndex = -1;
+                const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: activeRid, dataRole: 'td-jml' });
+                tdJ.dataset.singleCol = 'true'; tdJ.dataset.groupName = g; tdJ.appendChild(iJ); subTr.appendChild(tdJ);
             } else {
                 if (gHeader) {
-                    const inpUraian = document.createElement('input');
-                    inpUraian.type = 'text'; inpUraian.name = `uraian_horiz_${encodeURIComponent(g)}[]`;
-                    inpUraian.className = 'inp-gen text-dark'; inpUraian.placeholder = gHeader;
-                    const tdU = createCell('', { cls: 'align-middle', rowspan: rs, dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
-                    tdU.appendChild(inpUraian); tr1.appendChild(tdU);
+                    const iU = document.createElement('input');
+                    iU.type = 'text'; iU.name = `uraian_horiz_${encodeURIComponent(g)}[]`;
+                    iU.className = 'inp-gen text-dark'; iU.placeholder = gHeader;
+                    const tdU = createCell('', { cls: 'align-middle', dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
+                    tdU.appendChild(iU); subTr.appendChild(tdU);
                 }
                 horizGroups[g].forEach(c => {
-                    const rid   = c.id_rincian;
+                    const rid = c.id_rincian;
                     const mData = masterTarif[rid] || null;
-                    const t     = mData ? mData.besaran : 0;
-                    const inpHid = document.createElement('input');
-                    inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
-                    const inpQty = document.createElement('input');
-                    inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
-                    inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = 0; inpQty.step = '0.01'; inpQty.min = '0';
-                    inpQty.oninput = inpQty.onchange = () => calcRow(newId);
-                    const tdQ = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-qty' });
-                    tdQ.appendChild(inpHid); tdQ.appendChild(inpQty); tr1.appendChild(tdQ);
-                    const inpTrf = document.createElement('input');
-                    inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
-                    inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                    inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                    const inpKid = document.createElement('input');
-                    inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`; inpKid.value = mData ? mData.komp_id : 0;
-                    const tdT2 = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-tarif' });
-                    tdT2.appendChild(inpTrf); tdT2.appendChild(inpKid); tr1.appendChild(tdT2);
-                    const inpJml = document.createElement('input');
-                    inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                    const tdJ = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-jml' });
-                    tdJ.appendChild(inpJml); tr1.appendChild(tdJ);
+                    const t = mData ? mData.besaran : 0;
+                    const iH = document.createElement('input');
+                    iH.type = 'hidden'; iH.name = 'rincian_ids[]'; iH.value = rid;
+                    const iQ = document.createElement('input');
+                    iQ.type = 'number'; iQ.name = `komp_qty_${rid}[]`;
+                    iQ.className = 'inp-gen text-center inp-qty'; iQ.value = 0; iQ.step = '0.01'; iQ.min = '0';
+                    iQ.oninput = iQ.onchange = () => calcRow(parentId);
+                    const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' });
+                    tdQ.appendChild(iH); tdQ.appendChild(iQ); subTr.appendChild(tdQ);
+                    const iT = document.createElement('input');
+                    iT.type = 'text'; iT.name = `komp_tarif_${rid}[]`;
+                    iT.className = 'inp-gen inp-nom inp-tarif'; iT.value = fmtRp(t);
+                    iT.readOnly = true; iT.tabIndex = -1;
+                    const iK = document.createElement('input');
+                    iK.type = 'hidden'; iK.name = `komp_kompId_${rid}[]`; iK.value = mData ? mData.komp_id : 0;
+                    const tdT2 = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' });
+                    tdT2.appendChild(iT); tdT2.appendChild(iK); subTr.appendChild(tdT2);
+                    const iJ = document.createElement('input');
+                    iJ.type = 'text'; iJ.className = 'inp-gen inp-nom inp-jml-display'; iJ.value = '0'; iJ.readOnly = true; iJ.tabIndex = -1;
+                    const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' });
+                    tdJ.appendChild(iJ); subTr.appendChild(tdJ);
                 });
             }
         }
 
-        // Kolom vertikal baris-1
-        if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
+        // ── Kolom vertikal sub-row baris pertama ──────────────────────
+        if (vItems.length > 0) {
+            appendVertRow(subTr, vItems[0], null, parentId, 1);
+        }
+        // Baris vertikal ke-2 dst untuk sub-row
+        for (let i = 1; i < vItems.length; i++) {
+            const trExtra = document.createElement('tr');
+            parentTbody.appendChild(trExtra);
+            appendVertRow(trExtra, vItems[i], null, parentId, 1);
+        }
 
-        // Total, Pajak, Potongan, Netto — sub-baris punya kolom sendiri
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
-        tr1.appendChild(tdBruto);
-        const inpPajak = document.createElement('input');
-        inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
-        inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        inpPajak.value = pajakVal; inpPajak.placeholder = '0';
-        inpPajak.setAttribute('inputmode', 'decimal');
-        inpPajak.oninput = inpPajak.onchange = function() {
-            this.value = this.value.replace(/[^0-9.]/g, '');
-            calcRow(newId);
-        };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
-        tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
-
-        // Tombol aksi — hanya hapus (tidak ada + lagi agar tidak nested berlebih)
+        // ── Tombol hapus sub-row — ditempatkan di subTr ───────────────
         const btnDelSub = document.createElement('button');
-        btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
+        btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Mata Kuliah Ini';
         btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
         btnDelSub.innerHTML = '<i class="fas fa-trash"></i>';
         btnDelSub.onclick = () => {
-            // Kurangi kembali rowspan di baris induk
-            const pt = document.getElementById(`hr_${parentId}`);
-            if (pt) {
-                const ptr1 = pt.querySelector('tr:first-child');
-                if (ptr1) {
-                    const subRs = rs;
-                    const tdN = ptr1.querySelector('.row-no');
-                    const tdD = ptr1.querySelector('td:has(select[name="dosen_id[]"])') ||
-                                (tdN ? tdN.nextElementSibling : null);
-                    if (tdN && tdN.rowSpan > 1) tdN.rowSpan -= subRs;
-                    if (tdD && tdD.rowSpan > 1) tdD.rowSpan -= subRs;
-                    ptr1.querySelectorAll('td[rowspan]').forEach(td => {
-                        if (!td.dataset.role && td !== tdN && td !== tdD) {
-                            const allTds = Array.from(ptr1.cells);
-                            const firstRoleIdx = allTds.findIndex(t => t.dataset.role);
-                            if (firstRoleIdx === -1 || allTds.indexOf(td) < firstRoleIdx) {
-                                if (td.rowSpan > 1) td.rowSpan -= subRs;
-                            }
-                        }
-                        if (td.querySelector('.inp-pajak-pct') && td.rowSpan > 1) td.rowSpan -= subRs;
-                        if (td.classList.contains('text-center') && td.querySelector('.btn-action') && td.rowSpan > 1) td.rowSpan -= subRs;
-                    });
-                    ['.txt-total','.txt-potongan','.txt-netto'].forEach(cls => {
-                        const td = ptr1.querySelector(cls);
-                        if (td && td.rowSpan > 1) td.rowSpan -= subRs;
-                    });
-                    pt.dataset.subRowCount = Math.max(0, parseInt(pt.dataset.subRowCount || '0') - rs);
-                }
+            // Hapus baris ini (+ baris vertikal ekstra jika ada) dari tbody
+            // Identifikasi dengan data-sub-id
+            parentTbody.querySelectorAll(`tr[data-sub-id="${newId}"]`).forEach(r => r.remove());
+            // Kurangi rowspan semua td di tr-1 yang di-extend sebelumnya
+            if (tr1) {
+                Array.from(tr1.cells).forEach(td => {
+                    if (td.dataset.role) return;
+                    if ((td.rowSpan || 1) > 1) td.rowSpan -= addRs;
+                });
             }
-            tbody.remove(); reindexRows(); calcSummary();
+            calcRow(parentId);
+            calcSummary();
         };
         const btnAddSub = document.createElement('button');
         btnAddSub.type = 'button'; btnAddSub.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
         btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
         btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
         btnAddSub.onclick = () => addSubRowSameDosen(parentId);
-        const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:70px;' });
-        const wrapDiv = document.createElement('div');
-        wrapDiv.className = 'd-flex justify-content-center gap-1';
-        wrapDiv.appendChild(btnDelSub); wrapDiv.appendChild(btnAddSub);
-        tdAksi.appendChild(wrapDiv); tr1.appendChild(tdAksi);
+        const tdAksiSub = createCell('', { cls: 'text-center align-middle', style: 'min-width:70px;' });
+        const wrapSub = document.createElement('div');
+        wrapSub.className = 'd-flex justify-content-center gap-1';
+        wrapSub.appendChild(btnDelSub); wrapSub.appendChild(btnAddSub);
+        tdAksiSub.appendChild(wrapSub); subTr.appendChild(tdAksiSub);
 
-        // Baris vertikal ke-2 dst
+        // Tandai semua tr yang termasuk sub-row ini dengan data-sub-id
+        subTr.dataset.subId = newId;
         for (let i = 1; i < vItems.length; i++) {
-            const trN = mkTr();
-            appendVertRow(trN, vItems[i], null, newId, 1);
+            const lastTr = parentTbody.lastElementChild;
+            if (lastTr && lastTr !== subTr) lastTr.dataset.subId = newId;
         }
 
-        // Sisipkan tbody baru SETELAH tbody induk (atau setelah sub-row terakhir dari induk yg sama)
-        // Cari tbody terakhir yang punya parentId = parentId
-        let insertAfter = parentTbody;
-        document.querySelectorAll(`#tblHonorDetail tbody.honor-row[data-parent-id="${parentId}"]`).forEach(el => {
-            insertAfter = el;
-        });
-        insertAfter.insertAdjacentElement('afterend', tbody);
+        // Simpan hidden dosen_id & teks di subTr agar ikut submit
+        const hidDosen = document.createElement('input');
+        hidDosen.type = 'hidden'; hidDosen.name = 'dosen_id[]'; hidDosen.value = dosenId;
+        subTr.appendChild(hidDosen);
 
-        // Sinkronkan jabatan & tarif jika jabatan sudah terisi
+        // Sinkronkan tarif jabatan jika ada
         if (jabatan) {
             setTimeout(() => {
-                updateJafungTarif(newId, jabatan);
-                filterKomponenByJabatan(newId, jabatan);
+                // Update tarif di sub-row: cari td komponen di subTr dan update
+                parentTbody.querySelectorAll(`tr[data-sub-id="${newId}"] td[data-role="td-tarif"]`).forEach(tdTarif => {
+                    const rid = tdTarif.dataset.rid;
+                    if (!rid) return;
+                    const mData = masterTarif[rid];
+                    if (!mData) return;
+                    const kompId = String(mData.komp_id);
+                    if (jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
+                        const jt = jafungTarif[kompId][jabatan];
+                        const trfInp = tdTarif.querySelector('.inp-tarif');
+                        if (trfInp) trfInp.value = fmtRp(jt.besaran);
+                        // update data-rid & input names
+                        const ridBaru = String(jt.id);
+                        tdTarif.dataset.rid = ridBaru;
+                        const tdQ = parentTbody.querySelector(`tr[data-sub-id="${newId}"] td[data-role="td-qty"][data-rid="${rid}"]`) ||
+                                    parentTbody.querySelector(`tr[data-sub-id="${newId}"] td[data-role="td-qty"]`);
+                        if (tdQ) {
+                            tdQ.dataset.rid = ridBaru;
+                            const qInp = tdQ.querySelector('.inp-qty');
+                            if (qInp) qInp.name = `komp_qty_${ridBaru}[]`;
+                        }
+                        if (trfInp) trfInp.name = `komp_tarif_${ridBaru}[]`;
+                    }
+                });
+                calcRow(parentId);
             }, 50);
         }
 
-        setTimeout(() => calcRow(newId), 0);
+        setTimeout(() => calcRow(parentId), 0);
     }
 
     // ================================================================
@@ -1424,8 +1354,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     function calcSummary() {
         let sumB = 0, sumP = 0, count = 0;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(r => {
-            // Hanya hitung dosen dari baris induk (bukan sub-row)
-            if (!r.dataset.parentId) count++;
+            count++;
             const b = r.querySelector('.txt-total');
             const p = r.querySelector('.txt-potongan');
             if (b) sumB += cleanNum(b.innerText);
