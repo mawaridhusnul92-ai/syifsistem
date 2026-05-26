@@ -14,7 +14,7 @@ $gen_id = (int)($_GET['gen_id'] ?? 0);
 
 if ($gen_id <= 0) die("<h3 style='padding: 50px;'>Parameter tidak valid.</h3>");
 
-$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun, g.nama_honor, g.periode_semester,
+$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun,
         ds.nama as dosen_nama, ds.jabatan_fungsional as jabatan, ds.program_studi as default_prodi,
         t.custom_layout, t.nama_template
         FROM honor_generate_detail d
@@ -59,15 +59,21 @@ while($r = $res->fetch_assoc()) {
     if (empty($dosen)) { $dosen = [ 'nama' => 'PENGELOLA KEUANGAN', 'periode' => $nm_bln[$r['periode_bulan']] . ' ' . $r['periode_tahun'] ]; }
     $layout_json = $r['custom_layout'] ?? '';
     $nama_template_doc = $r['nama_template'] ?? '';
-    if (empty($nama_honor_doc)) $nama_honor_doc = $r['nama_honor'] ?? '';
-    if (empty($periode_semester_doc)) $periode_semester_doc = $r['periode_semester'] ?? '';
     
     $t_bruto += (double)$r['total_honor']; $t_pajak += (double)$r['potongan_pajak'];
 }
 $t_netto = $t_bruto - $t_pajak;
 
-$nama_honor_doc = '';
+// AMBIL nama_honor dan periode_semester langsung dari DB (aman jika kolom belum ada)
+$nama_honor_doc      = '';
 $periode_semester_doc = '';
+$res_gen_info = @$conn->query("SELECT nama_honor, periode_semester FROM honor_generate WHERE id=$gen_id LIMIT 1");
+if ($res_gen_info) {
+    $rgi = $res_gen_info->fetch_assoc();
+    $nama_honor_doc      = $rgi['nama_honor'] ?? '';
+    $periode_semester_doc = $rgi['periode_semester'] ?? '';
+}
+
 $master_tarif = [];
 $res_tarif = $conn->query("SELECT id, besaran, rincian, satuan FROM honor_komponen_detail");
 if ($res_tarif) { while ($row_t = $res_tarif->fetch_assoc()) { $master_tarif[$row_t['id']] = $row_t; } }

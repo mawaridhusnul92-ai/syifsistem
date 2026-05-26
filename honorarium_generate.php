@@ -293,8 +293,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
-    $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
+    // rowspan='2' hanya jika ada baris header ke-2 (hdr2 tidak kosong)
+    $_rs_hdr = !empty($hdr2) ? "rowspan='2'" : "";
+    $hdr1 .= "<th {$_rs_hdr} style='min-width: 130px;'>TOTAL BRUTO</th><th {$_rs_hdr} style='min-width: 80px;'>PAJAK (%)</th><th {$_rs_hdr} style='min-width: 120px;'>POTONGAN</th><th {$_rs_hdr} style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th {$_rs_hdr} style='min-width: 90px;'>Aksi</th>";
 ?>
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
@@ -948,6 +950,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         }
 
         // ── Total Bruto, Pajak, Potongan, Netto ──────────────────────
+        // Urutan HARUS sesuai header PHP: TOTAL BRUTO | PAJAK (%) | POTONGAN | HONOR DITERIMA | Aksi
         const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
         tr1.appendChild(tdBruto);
 
@@ -961,12 +964,19 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             this.value = this.value.replace(/[^0-9.]/g, '');
             calcRow(id);
         };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
+        const tdPajak = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:80px;' });
         tdPajak.appendChild(inpPajak);
         tr1.appendChild(tdPajak);
 
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+        // POTONGAN — kolom ke-3 setelah komponen
+        const tdPotongan = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' });
+        tdPotongan.dataset.col = 'potongan';
+        tr1.appendChild(tdPotongan);
+
+        // HONOR DITERIMA — kolom ke-4 setelah komponen
+        const tdNetto = createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' });
+        tdNetto.dataset.col = 'netto';
+        tr1.appendChild(tdNetto);
 
         if (!readOnly) {
             const btnDel = document.createElement('button');
@@ -1277,7 +1287,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         // Kolom vertikal baris-1
         if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
 
-        // Total, Pajak, Potongan, Netto
+        // Total, Pajak, Potongan, Netto — urutan sesuai header: TOTAL BRUTO | PAJAK (%) | POTONGAN | HONOR DITERIMA
         const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
         tr1.appendChild(tdBruto);
         const inpPajak = document.createElement('input');
@@ -1289,10 +1299,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             this.value = this.value.replace(/[^0-9.]/g, '');
             calcRow(newId);
         };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
+        const tdPajak = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:80px;' });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+        // POTONGAN
+        const tdPot2 = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' });
+        tdPot2.dataset.col = 'potongan';
+        tr1.appendChild(tdPot2);
+        // HONOR DITERIMA
+        const tdNet2 = createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' });
+        tdNet2.dataset.col = 'netto';
+        tr1.appendChild(tdNet2);
 
         // Tombol aksi
         const btnDelSub = document.createElement('button');
@@ -1368,8 +1384,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const netto    = total_bruto - potongan;
 
         const txtBruto = tbody.querySelector('.txt-total');
-        const txtPot   = tbody.querySelector('.txt-potongan');
-        const txtNet   = tbody.querySelector('.txt-netto');
+        const txtPot   = tbody.querySelector('td[data-col="potongan"]') || tbody.querySelector('.txt-potongan');
+        const txtNet   = tbody.querySelector('td[data-col="netto"]')    || tbody.querySelector('.txt-netto');
 
         if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(total_bruto);
         if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
@@ -1386,7 +1402,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(r => {
             count++;
             const b = r.querySelector('.txt-total');
-            const p = r.querySelector('.txt-potongan');
+            const p = r.querySelector('td[data-col="potongan"]') || r.querySelector('.txt-potongan');
             if (b) sumB += cleanNum(b.innerText);
             if (p) sumP += cleanNum(p.innerText);
         });
