@@ -12,11 +12,29 @@
 $_cols_tpl = [];
 $_res_show = $conn->query("SHOW COLUMNS FROM honor_template");
 if ($_res_show) { while ($_rc = $_res_show->fetch_assoc()) $_cols_tpl[] = $_rc['Field']; }
+
+$_jenis_tujuan_baru = false;
+if (!in_array('jenis_tujuan', $_cols_tpl)) {
+    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+    $_jenis_tujuan_baru = true;
+}
 if (!in_array('linked_pengajuan_template_id', $_cols_tpl)) {
     $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
 }
-if (!in_array('jenis_tujuan', $_cols_tpl)) {
-    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+
+// ── MIGRASI: template lama (sebelum fitur sub-menu) → set ke PENGAJUAN ──
+// Jika kolom jenis_tujuan baru saja ditambah ATAU ada template tanpa jenis_tujuan yang jelas,
+// pastikan semua template yang tidak punya linked_pengajuan_template_id di-set ke PENGAJUAN.
+// Ini agar template lama yang sudah dibuat tetap terlihat di sub-menu Pengajuan.
+if ($_jenis_tujuan_baru) {
+    // Kolom baru → semua template existing di-set PENGAJUAN
+    $conn->query("UPDATE honor_template SET jenis_tujuan='PENGAJUAN' WHERE jenis_tujuan IS NULL OR jenis_tujuan=''");
+} else {
+    // Kolom sudah ada tapi mungkin ada template lama yang terdaftar sebagai KUITANSI
+    // padahal tidak punya linked_pengajuan_template_id (artinya template lama biasa)
+    $conn->query("UPDATE honor_template SET jenis_tujuan='PENGAJUAN'
+                  WHERE (linked_pengajuan_template_id IS NULL OR linked_pengajuan_template_id = 0)
+                    AND jenis_tujuan = 'KUITANSI'");
 }
 
 // ── Ambil semua template dipisah per jenis ──────────────────────────

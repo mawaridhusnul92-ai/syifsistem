@@ -97,6 +97,16 @@ $res_tpl = $conn->query("SHOW COLUMNS FROM honor_template");
 if ($res_tpl) { while($rc = $res_tpl->fetch_assoc()) $cols_tpl[] = $rc['Field']; }
 if (!in_array('linked_pengajuan_template_id', $cols_tpl))
     $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
+// Migrasi: template lama tanpa linked_id → pastikan jenis_tujuan = PENGAJUAN
+if (!in_array('jenis_tujuan', $cols_tpl)) {
+    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+    $conn->query("UPDATE honor_template SET jenis_tujuan='PENGAJUAN'");
+} else {
+    // Kolom sudah ada: template lama tanpa linked_id yang masih KUITANSI → ubah ke PENGAJUAN
+    $conn->query("UPDATE honor_template SET jenis_tujuan='PENGAJUAN'
+                  WHERE (linked_pengajuan_template_id IS NULL OR linked_pengajuan_template_id = 0)
+                    AND jenis_tujuan = 'KUITANSI'");
+}
 
 // Pastikan kolom opsional di honor_komponen ada (ALTER jika belum)
 $cols_exist = [];
