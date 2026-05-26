@@ -84,7 +84,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     .cell-qty { min-width: 70px; text-align: center; } .cell-nom { min-width: 120px; text-align: right; } .cell-tot { min-width: 120px; text-align: right; font-weight: 800; background: #f8fafc; color: #0d6efd; white-space: nowrap; }
     .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; min-width: 120px; display: block; }
     .btn-action { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px;}
-    /* Highlight sel jumlah saat ada nilai */
+    tbody.honor-row[data-parent-id] > tr > td { background: #f8fff8 !important; }
+    tbody.honor-row[data-parent-id] > tr:first-child > td:first-child { border-left: 3px solid #22c55e; }
     .inp-jml-display { text-align: right; font-weight: 700; color: #0d6efd; background: transparent; border: none; width: 100%; padding: 0; }
     /* ── Hilangkan spinner (tanda panah atas/bawah) pada input number ── */
     input.inp-qty::-webkit-outer-spin-button,
@@ -376,8 +377,28 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         return new Intl.NumberFormat('id-ID').format(Math.round(parseFloat(val) || 0));
     }
     function cleanNum(str) {
-        // Hapus semua karakter non-digit (titik ribuan, "Rp", spasi, dll)
-        return parseFloat(String(str).replace(/[^0-9]/g, '')) || 0;
+        // Hapus titik ribuan (titik yang diikuti 3 digit), lalu parse
+        // Contoh: "3.000" → 3000, "1.5" → 1.5, "Rp 250.000" → 250000
+        let s = String(str).replace(/[^0-9.,]/g, ''); // hapus Rp, spasi, dll
+        // Deteksi format ribuan: jika ada titik dan setelahnya tepat 3 digit (akhir string atau koma)
+        // Format ID: 1.500.000 atau 1.500 (titik = ribuan, koma = desimal)
+        // Strategi: jika ada koma → koma adalah desimal, titik adalah ribuan
+        if (s.indexOf(',') !== -1) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        } else {
+            // Tidak ada koma: titik yang diikuti tepat 3 digit di akhir = ribuan
+            // Misal: "3.000" → ribuan, "1.5" → desimal
+            const dotIdx = s.lastIndexOf('.');
+            if (dotIdx !== -1) {
+                const afterDot = s.substring(dotIdx + 1);
+                if (afterDot.length === 3) {
+                    // Kemungkinan ribuan, hapus semua titik
+                    s = s.replace(/\./g, '');
+                }
+                // else: titik desimal biasa (misal 1.5), biarkan
+            }
+        }
+        return parseFloat(s) || 0;
     }
     function cleanPct(str) {
         // Untuk persen: izinkan titik desimal, ganti koma jadi titik
@@ -1017,6 +1038,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     //  delHonorRow & reindexRows
     // ================================================================
     function delHonorRow(id) {
+        // Hapus sub-row yang terikat ke baris ini terlebih dahulu
+        document.querySelectorAll(`#tblHonorDetail tbody.honor-row[data-parent-id="${id}"]`).forEach(el => el.remove());
         const el = document.getElementById('hr_' + id);
         if (el) el.remove();
         reindexRows();
@@ -1025,16 +1048,22 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
     function reindexRows() {
         let idx = 1;
-        document.querySelectorAll('#tblHonorDetail tbody.honor-row .row-no').forEach(td => {
-            td.innerText = idx++;
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
+            // Hanya baris induk (tidak punya data-parent-id) yang dapat nomor urut
+            if (!tbody.dataset.parentId) {
+                const tdNo = tbody.querySelector('.row-no');
+                if (tdNo) tdNo.innerText = idx++;
+            }
         });
     }
 
     // ================================================================
     //  addSubRowSameDosen — Tambah baris baru di bawah dengan dosen SAMA
-    //  Dosen di-rowspan: baris induk tidak berubah, baris baru = baris
-    //  mandiri (entry terpisah) dengan dosen yang sama. Ini menjaga
-    //  kompatibilitas dengan sistem submit yang sudah ada.
+    //  Cara kerja MERGE CELL:
+    //  1. td No & td Dosen di baris INDUK di-extend rowspan-nya (+rs)
+    //  2. Baris baru TIDAK punya td No/Dosen — cukup kolom komponen saja
+    //  3. Nomor tetap sama (misal 1), bukan 1a atau 2
+    //  4. Submit: dosen_id dan no baris disimpan via hidden input di tbody baru
     // ================================================================
     function addSubRowSameDosen(parentId) {
         const parentTbody = document.getElementById(`hr_${parentId}`);
@@ -1043,7 +1072,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         // Ambil data dosen dari baris induk
         const selDosenParent = parentTbody.querySelector('select[name="dosen_id[]"]');
         const dosenId = selDosenParent ? selDosenParent.value : '';
-        const dosenNama = selDosenParent ? selDosenParent.options[selDosenParent.selectedIndex]?.text : '';
+        const dosenNama = selDosenParent ? (selDosenParent.options[selDosenParent.selectedIndex]?.text || '') : '';
 
         if (!dosenId) {
             Swal.fire('Peringatan', 'Pilih dosen terlebih dahulu sebelum menambah baris.', 'warning');
@@ -1058,32 +1087,73 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const pajakParent = parentTbody.querySelector('.inp-pajak-pct');
         const pajakVal = pajakParent ? pajakParent.value : '0';
 
-        // Buat data "d" seperti row kosong tapi dosen sama
-        const dSub = {
-            dosen_id: dosenId,
-            prodi: '',
-            mata_kuliah: '',
-            dosen_jabatan: jabatan,
-            komponen: {}
-        };
-
         // Ambil prodi dari baris induk
         const prodiInp = parentTbody.querySelector('input.inp-prodi');
-        if (prodiInp) dSub.prodi = prodiInp.value;
+        const prodiVal = prodiInp ? prodiInp.value : '';
 
-        // Buat row baru menggunakan addHonorMatrixRow dengan data dosen yang sama
         rCount++;
         const newId = rCount;
 
         const vItems   = vertGroup.items || [];
         const rs       = vItems.length > 0 ? vItems.length : 1;
 
-        // Buat tbody baru
+        // ── EXTEND rowspan pada td No & td Dosen di baris INDUK ──────
+        // Kita simpan jumlah sub-row di dataset parentTbody
+        const prevSubRows = parseInt(parentTbody.dataset.subRowCount || '0');
+        parentTbody.dataset.subRowCount = prevSubRows + rs;
+
+        // td No: cari di tr pertama baris induk (kolom pertama)
+        const parentTr1 = parentTbody.querySelector('tr:first-child');
+        if (parentTr1) {
+            const tdNo    = parentTr1.querySelector('.row-no');
+            const tdDosen = parentTr1.querySelector('td:has(select[name="dosen_id[]"])') ||
+                            (tdNo ? tdNo.nextElementSibling : null);
+            if (tdNo)    tdNo.rowSpan    = (tdNo.rowSpan    || 1) + rs;
+            if (tdDosen) tdDosen.rowSpan = (tdDosen.rowSpan || 1) + rs;
+
+            // Juga extend semua td teks (prodi, matkul, jabatan) yg rowspan = total baris induk
+            // agar tetap ter-merge dengan benar
+            parentTr1.querySelectorAll('td[rowspan]').forEach(td => {
+                // Hanya extend td yang masih menjadi bagian dari "header" baris dosen
+                // (yaitu td yang rowspan-nya sama dengan jumlah sub-rows sebelumnya + rs induk)
+                // Kita gunakan pendekatan: td yang BUKAN td komponen (tidak punya data-role)
+                // Karena td No, Dosen, dan kolom teks tidak punya data-role
+                if (!td.dataset.role && td !== tdNo && td !== tdDosen) {
+                    // Hanya extend jika ini memang kolom teks dosen (bukan kolom komponen)
+                    // Cek: apakah posisi td ini sebelum kolom pertama yang punya data-role?
+                    const allTds = Array.from(parentTr1.cells);
+                    const firstRoleTdIdx = allTds.findIndex(t => t.dataset.role);
+                    const thisTdIdx = allTds.indexOf(td);
+                    if (firstRoleTdIdx === -1 || thisTdIdx < firstRoleTdIdx) {
+                        td.rowSpan = (td.rowSpan || 1) + rs;
+                    }
+                }
+            });
+
+            // Extend juga td Total, Pajak, Potongan, Netto, Aksi (kolom kanan)
+            // yang ada di tr1 baris induk dan memiliki rowspan
+            const rightCls = ['txt-total','txt-potongan','txt-netto'];
+            rightCls.forEach(cls => {
+                const td = parentTr1.querySelector(`.${cls}`);
+                if (td) td.rowSpan = (td.rowSpan || 1) + rs;
+            });
+            // td pajak & td aksi: cari lewat posisi (tidak punya class unik)
+            // Extend semua td dengan rowspan yang punya class text-center (aksi) atau punya inp-pajak-pct
+            parentTr1.querySelectorAll('td').forEach(td => {
+                if (td.querySelector('.inp-pajak-pct')) td.rowSpan = (td.rowSpan || 1) + rs;
+                if (td.classList.contains('text-center') && td.querySelector('.btn-action')) td.rowSpan = (td.rowSpan || 1) + rs;
+            });
+        }
+
+        // Buat tbody baru (TANPA td No dan td Dosen — sudah di-merge di induk)
         const tbody = document.createElement('tbody');
         tbody.id        = `hr_${newId}`;
-        tbody.className = 'honor-row bg-white border-top border-2 border-info border-opacity-25';
-        // Tandai sebagai sub-row dari parent agar mudah diidentifikasi
+        tbody.className = 'honor-row bg-white';
         tbody.dataset.parentId = parentId;
+        // Hidden input untuk submit dosen_id (karena td dosen ada di baris induk)
+        const hidDosenId = document.createElement('input');
+        hidDosenId.type = 'hidden'; hidDosenId.name = 'dosen_id[]'; hidDosenId.value = dosenId;
+        tbody.appendChild(hidDosenId);
 
         function mkTr() {
             const tr = document.createElement('tr');
@@ -1093,71 +1163,36 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
         const tr1 = mkTr();
 
-        // No — tampilkan nomor induk dengan suffix (contoh: 1a)
-        const parentNo = parentTbody.querySelector('.row-no')?.innerText || '';
-        tr1.appendChild(createCell(`${parentNo}+`, { cls: 'text-center align-middle fw-bold row-no text-info', rowspan: rs, style: 'font-size:11px;' }));
-
-        // Dropdown Dosen — sudah dipilih (dosen sama), merge visual dengan baris induk
-        const selDosen = document.createElement('select');
-        selDosen.name      = 'dosen_id[]';
-        selDosen.className = 'inp-gen text-dark inp-dosen-w';
-        selDosen.required  = true;
-        selDosen.style.cssText = 'background: #f0fff4; border-color: #22c55e;';
-        selDosen.onchange  = () => syncProdi(selDosen, newId);
-        dosenOpts.forEach(o => {
-            const opt    = document.createElement('option');
-            opt.value    = o.val;
-            opt.text     = o.lbl;
-            opt.dataset.prodi   = o.prodi;
-            opt.dataset.jabatan = o.jabatan;
-            if (String(o.val) === String(dosenId)) opt.selected = true;
-            selDosen.appendChild(opt);
-        });
-        const tdDosen = createCell('', { cls: 'text-start align-middle', rowspan: rs, style: 'background:#f0fff4; border-left:3px solid #22c55e;' });
-        tdDosen.appendChild(selDosen);
-        tr1.appendChild(tdDosen);
-
-        // Kolom teks (kosong, siap diisi — mata kuliah baru)
+        // Kolom teks (prodi, matkul, jabatan) — baris baru punya kolom sendiri
+        // karena matkul beda. Prodi & jabatan auto-terisi dari baris induk.
         teksCols.forEach(c => {
             let val = '';
-            if (c.source === 'prodi')   val = dSub.prodi;
+            if (c.source === 'prodi')   val = prodiVal;
             if (c.source === 'jabatan') val = jabatan;
 
             const tdT = createCell('', { cls: 'align-middle', rowspan: rs });
 
             if (c.source === 'jabatan') {
-                const selJabatan = document.createElement('select');
-                selJabatan.name      = `teks_${c.source}[]`;
-                selJabatan.className = 'inp-gen text-dark inp-teks-w inp-jabatan';
-                const jabatanOptions = ['', 'Tenaga Pengajar', 'Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Profesor'];
-                jabatanOptions.forEach(jOpt => {
-                    const opt = document.createElement('option');
-                    opt.value = jOpt; opt.text = jOpt === '' ? '-- Pilih Jabatan --' : jOpt;
-                    if (jOpt === val) opt.selected = true;
-                    selJabatan.appendChild(opt);
-                });
-                selJabatan.onchange = function() {
-                    updateJafungTarif(newId, this.value);
-                    filterKomponenByJabatan(newId, this.value);
-                };
-                tdT.appendChild(selJabatan);
+                // Jabatan: tampilkan sebagai teks saja (sama dengan induk, tidak perlu diubah)
+                tdT.innerHTML = `<span class="text-dark fw-bold small px-2">${val || '&mdash;'}</span>`;
+                // Hidden input untuk submit
+                const hidJab = document.createElement('input');
+                hidJab.type = 'hidden'; hidJab.name = `teks_${c.source}[]`; hidJab.value = val;
+                tdT.appendChild(hidJab);
+            } else if (c.source === 'prodi') {
+                // Prodi: tampilkan sebagai teks saja (sama dengan induk)
+                tdT.innerHTML = `<span class="text-muted small px-2">${val || '&mdash;'}</span>`;
+                const hidProdi = document.createElement('input');
+                hidProdi.type = 'hidden'; hidProdi.name = `teks_${c.source}[]`; hidProdi.value = val;
+                tdT.appendChild(hidProdi);
             } else {
+                // Mata kuliah: input kosong, siap diisi user
                 const inp = document.createElement('input');
                 inp.type  = 'text';
                 inp.name  = `teks_${c.source}[]`;
                 inp.value = val;
-                let extraClass = '';
-                if (c.source === 'prodi') extraClass = ' inp-prodi';
-                inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
-                if (c.source === 'prodi') inp.readOnly = true;
-                if (c.source !== 'prodi') inp.required = true;
-                if (c.source === 'prodi') {
-                    const dl = document.createElement('datalist');
-                    dl.id = `dlProdi_${newId}`;
-                    prodiList.forEach(p => { const op = document.createElement('option'); op.value = p; dl.appendChild(op); });
-                    inp.setAttribute('list', `dlProdi_${newId}`);
-                    tdT.appendChild(dl);
-                }
+                inp.className = 'inp-gen text-dark inp-teks-w';
+                inp.required = true;
                 tdT.appendChild(inp);
             }
             tr1.appendChild(tdT);
@@ -1245,7 +1280,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         // Kolom vertikal baris-1
         if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
 
-        // Total, Pajak, Potongan, Netto
+        // Total, Pajak, Potongan, Netto — sub-baris punya kolom sendiri
         const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
         tr1.appendChild(tdBruto);
         const inpPajak = document.createElement('input');
@@ -1262,17 +1297,48 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
         tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
 
-        // Tombol aksi
+        // Tombol aksi — hanya hapus (tidak ada + lagi agar tidak nested berlebih)
         const btnDelSub = document.createElement('button');
         btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
         btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
         btnDelSub.innerHTML = '<i class="fas fa-trash"></i>';
-        btnDelSub.onclick = () => { tbody.remove(); reindexRows(); calcSummary(); };
+        btnDelSub.onclick = () => {
+            // Kurangi kembali rowspan di baris induk
+            const pt = document.getElementById(`hr_${parentId}`);
+            if (pt) {
+                const ptr1 = pt.querySelector('tr:first-child');
+                if (ptr1) {
+                    const subRs = rs;
+                    const tdN = ptr1.querySelector('.row-no');
+                    const tdD = ptr1.querySelector('td:has(select[name="dosen_id[]"])') ||
+                                (tdN ? tdN.nextElementSibling : null);
+                    if (tdN && tdN.rowSpan > 1) tdN.rowSpan -= subRs;
+                    if (tdD && tdD.rowSpan > 1) tdD.rowSpan -= subRs;
+                    ptr1.querySelectorAll('td[rowspan]').forEach(td => {
+                        if (!td.dataset.role && td !== tdN && td !== tdD) {
+                            const allTds = Array.from(ptr1.cells);
+                            const firstRoleIdx = allTds.findIndex(t => t.dataset.role);
+                            if (firstRoleIdx === -1 || allTds.indexOf(td) < firstRoleIdx) {
+                                if (td.rowSpan > 1) td.rowSpan -= subRs;
+                            }
+                        }
+                        if (td.querySelector('.inp-pajak-pct') && td.rowSpan > 1) td.rowSpan -= subRs;
+                        if (td.classList.contains('text-center') && td.querySelector('.btn-action') && td.rowSpan > 1) td.rowSpan -= subRs;
+                    });
+                    ['.txt-total','.txt-potongan','.txt-netto'].forEach(cls => {
+                        const td = ptr1.querySelector(cls);
+                        if (td && td.rowSpan > 1) td.rowSpan -= subRs;
+                    });
+                    pt.dataset.subRowCount = Math.max(0, parseInt(pt.dataset.subRowCount || '0') - rs);
+                }
+            }
+            tbody.remove(); reindexRows(); calcSummary();
+        };
         const btnAddSub = document.createElement('button');
         btnAddSub.type = 'button'; btnAddSub.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
         btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
         btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
-        btnAddSub.onclick = () => addSubRowSameDosen(newId);
+        btnAddSub.onclick = () => addSubRowSameDosen(parentId);
         const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:70px;' });
         const wrapDiv = document.createElement('div');
         wrapDiv.className = 'd-flex justify-content-center gap-1';
@@ -1285,8 +1351,13 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             appendVertRow(trN, vItems[i], null, newId, 1);
         }
 
-        // Sisipkan tbody baru SETELAH tbody induk
-        parentTbody.insertAdjacentElement('afterend', tbody);
+        // Sisipkan tbody baru SETELAH tbody induk (atau setelah sub-row terakhir dari induk yg sama)
+        // Cari tbody terakhir yang punya parentId = parentId
+        let insertAfter = parentTbody;
+        document.querySelectorAll(`#tblHonorDetail tbody.honor-row[data-parent-id="${parentId}"]`).forEach(el => {
+            insertAfter = el;
+        });
+        insertAfter.insertAdjacentElement('afterend', tbody);
 
         // Sinkronkan jabatan & tarif jika jabatan sudah terisi
         if (jabatan) {
@@ -1320,7 +1391,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             const jmlInp = tdJml.querySelector('.inp-jml-display');
             if (!qtyInp || !trfInp || !jmlInp) return;
 
-            const qty   = parseFloat(qtyInp.value) || 0;
+            // qty: ambil langsung dari value (bisa desimal, misal 1.5 atau 15)
+            const qty   = parseFloat(String(qtyInp.value).replace(',', '.')) || 0;
             const tarif = cleanNum(trfInp.value);   // "4.000" → 4000
             const jml   = qty * tarif;
             total_bruto += jml;
@@ -1352,7 +1424,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     function calcSummary() {
         let sumB = 0, sumP = 0, count = 0;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(r => {
-            count++;
+            // Hanya hitung dosen dari baris induk (bukan sub-row)
+            if (!r.dataset.parentId) count++;
             const b = r.querySelector('.txt-total');
             const p = r.querySelector('.txt-potongan');
             if (b) sumB += cleanNum(b.innerText);
