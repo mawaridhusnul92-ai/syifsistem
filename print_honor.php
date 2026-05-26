@@ -65,8 +65,8 @@ while($r = $res->fetch_assoc()) {
 $t_netto = $t_bruto - $t_pajak;
 
 $master_tarif = [];
-$res_tarif = $conn->query("SELECT id, besaran FROM honor_komponen_detail");
-if ($res_tarif) { while ($row_t = $res_tarif->fetch_assoc()) { $master_tarif[$row_t['id']] = $row_t['besaran']; } }
+$res_tarif = $conn->query("SELECT id, besaran, rincian, satuan FROM honor_komponen_detail");
+if ($res_tarif) { while ($row_t = $res_tarif->fetch_assoc()) { $master_tarif[$row_t['id']] = $row_t; } }
 
 // PARSER LAYOUT CERDAS
 $layout_cols = json_decode($layout_json, true) ?: [];
@@ -95,7 +95,13 @@ foreach ($teks_cols as $t) { $th_row1 .= "<th rowspan='2'>".strtoupper($t['label
 foreach ($horiz_groups as $gName => $items) {
     $cs = count($items) * 3;
     $th_row1 .= "<th colspan='$cs' style='background-color:#ffc107 !important; color:#000;'>".strtoupper($gName)."</th>";
-    foreach($items as $it) { $th_row2 .= "<th>".strtoupper($it['label'])."</th><th>TARIF</th><th>JUMLAH</th>"; $col_count += 3; }
+    foreach($items as $it) {
+        $rid_it  = (int)($it['id_rincian'] ?? 0);
+        $sat_it  = !empty($master_tarif[$rid_it]['satuan']) ? $master_tarif[$rid_it]['satuan'] : 'Satuan';
+        $th_row2 .= "<th>".strtoupper($it['label'])."<br><small style='font-weight:normal;font-size:8px;'>($sat_it)</small></th>";
+        $th_row2 .= "<th>Rp/$sat_it</th><th>JUMLAH</th>";
+        $col_count += 3;
+    }
 }
 
 if (count($vert_group_info['items']) > 0) {
@@ -107,7 +113,10 @@ if (count($vert_group_info['items']) > 0) {
     }
     
     $th_row1 .= "<th colspan='3' style='background-color:#ffc107 !important; color:#000;'>".strtoupper($vert_group_info['name'])."</th>";
-    $th_row2 .= "<th>JML/QTY</th><th>TARIF</th><th>JUMLAH</th>";
+    // Ambil satuan dari item pertama grup vertikal
+    $first_vr_id = (int)($vert_group_info['items'][0]['id_rincian'] ?? 0);
+    $first_vr_sat = !empty($master_tarif[$first_vr_id]['satuan']) ? $master_tarif[$first_vr_id]['satuan'] : 'Satuan';
+    $th_row2 .= "<th>Jml ($first_vr_sat)</th><th>Rp/$first_vr_sat</th><th>JUMLAH</th>";
     $col_count += 4;
 }
 
@@ -227,10 +236,12 @@ if (empty($signatures)) {
                                         $rid = $h['id_rincian'];
                                         $q = $i['komponen'][$rid]['qty'] ?? 0;
                                         $trf = $i['komponen'][$rid]['tarif'] ?? 0;
-                                        if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid];
-                                        $jml = $q * $trf; 
+                                        if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
+                                        $jml = $q * $trf;
+                                        $sat = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
+                                        $qty_disp = ($q>0) ? $q . ($sat ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat.'</small>' : '') : '-';
                                         
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
+                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>$qty_disp</td>";
                                         echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
                                         echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
                                     }
@@ -243,11 +254,13 @@ if (empty($signatures)) {
                                 $rid = $v['id_rincian'];
                                 $q = $i['komponen'][$rid]['qty'] ?? 0;
                                 $trf = $i['komponen'][$rid]['tarif'] ?? 0;
-                                if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid];
+                                if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
                                 $jml = $q * $trf;
+                                $sat_v = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
+                                $qty_disp_v = ($q>0) ? $q . ($sat_v ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat_v.'</small>' : '') : '-';
                                 
                                 echo "<td>".htmlspecialchars($v['label'])."</td>";
-                                echo "<td class='text-center fw-bold'>".($q>0?$q:'-')."</td>";
+                                echo "<td class='text-center fw-bold'>$qty_disp_v</td>";
                                 echo "<td class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
                                 echo "<td class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
 

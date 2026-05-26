@@ -237,13 +237,23 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         } else {
             $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
         }
-        foreach($items as $it) { $hdr2 .= "<th class='cell-qty'>".strtoupper($it['label'])."</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>"; }
+        foreach($items as $it) {
+            $rid_it = $it['id_rincian'] ?? 0;
+            $satuan_it = !empty($rincian_master[$rid_it]['satuan']) ? $rincian_master[$rid_it]['satuan'] : 'QTY';
+            // Buat label Qty = satuan (misal: SKS / Mahasiswa) dan Tarif = Rp/satuan
+            $qty_lbl   = strtoupper($satuan_it);
+            $tarif_lbl = 'Rp/' . $satuan_it;
+            $hdr2 .= "<th class='cell-qty'>".strtoupper($it['label'])."<br><small class='fw-normal text-muted'>($qty_lbl)</small></th><th class='cell-nom'>$tarif_lbl</th><th class='cell-tot'>JUMLAH</th>";
+        }
     }
 
     if (count($vert_group_info['items']) > 0) {
         $hdr1 .= "<th rowspan='2' class='col-teks'>".strtoupper($vert_group_info['header'])."</th>";
         $hdr1 .= "<th colspan='3' class='th-group'>".strtoupper($vert_group_info['name'])."</th>";
-        $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
+        // Ambil satuan dari item pertama grup vertikal
+        $first_v_rid = $vert_group_info['items'][0]['id_rincian'] ?? 0;
+        $first_v_sat = !empty($rincian_master[$first_v_rid]['satuan']) ? $rincian_master[$first_v_rid]['satuan'] : 'QTY';
+        $hdr2 .= "<th class='cell-qty'>JML ($first_v_sat)</th><th class='cell-nom'>Rp/$first_v_sat</th><th class='cell-tot'>JUMLAH</th>";
     }
 
     $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
