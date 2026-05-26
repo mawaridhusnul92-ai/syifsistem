@@ -85,10 +85,18 @@ function postInt($key, $def=0)  { return (int)($_POST[$key] ?? $def); }
 $conn->query("CREATE TABLE IF NOT EXISTS honor_template (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nama_template VARCHAR(150) NOT NULL,
-    jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'KUITANSI',
+    jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN',
     custom_layout MEDIUMTEXT NULL,
+    linked_pengajuan_template_id INT NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Pastikan kolom linked_pengajuan_template_id di honor_template ada
+$cols_tpl = [];
+$res_tpl = $conn->query("SHOW COLUMNS FROM honor_template");
+if ($res_tpl) { while($rc = $res_tpl->fetch_assoc()) $cols_tpl[] = $rc['Field']; }
+if (!in_array('linked_pengajuan_template_id', $cols_tpl))
+    $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
 
 // Pastikan kolom opsional di honor_komponen ada (ALTER jika belum)
 $cols_exist = [];
@@ -134,8 +142,13 @@ try {
         case 'save_template':
             $id           = postInt('id');
             $nama         = esc($conn, postStr('nama_template'));
-            $jenis        = esc($conn, postStr('jenis_tujuan', 'KUITANSI'));
+            // jenis_tujuan ditentukan dari sub-menu: 'PENGAJUAN' atau 'KUITANSI'
+            $jenis        = esc($conn, postStr('jenis_tujuan', 'PENGAJUAN'));
+            if (!in_array($jenis, ['PENGAJUAN', 'KUITANSI'])) $jenis = 'PENGAJUAN';
             $layout_json  = postStr('custom_layout', '[]');
+            // ID template pengajuan yang menjadi acuan (hanya untuk KUITANSI)
+            $linked_id    = postInt('linked_pengajuan_template_id');
+            if ($jenis === 'PENGAJUAN') $linked_id = 0; // PENGAJUAN tidak perlu linked
 
             // Validasi JSON
             $parsed = json_decode($layout_json, true);
@@ -147,13 +160,19 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Nama Template wajib diisi!']);
                 break;
             }
+            // Validasi: kuitansi wajib link ke pengajuan
+            if ($jenis === 'KUITANSI' && $linked_id <= 0) {
+                echo json_encode(['status' => 'error', 'message' => 'Template Kuitansi wajib ditautkan ke Template Pengajuan yang ada!']);
+                break;
+            }
 
-            $layout_safe = esc($conn, $layout_json);
+            $layout_safe  = esc($conn, $layout_json);
+            $linked_val   = $linked_id > 0 ? $linked_id : 'NULL';
 
             if ($id > 0) {
-                $q = "UPDATE honor_template SET nama_template='$nama', jenis_tujuan='$jenis', custom_layout='$layout_safe' WHERE id=$id";
+                $q = "UPDATE honor_template SET nama_template='$nama', jenis_tujuan='$jenis', custom_layout='$layout_safe', linked_pengajuan_template_id=$linked_val WHERE id=$id";
             } else {
-                $q = "INSERT INTO honor_template (nama_template, jenis_tujuan, custom_layout) VALUES ('$nama','$jenis','$layout_safe')";
+                $q = "INSERT INTO honor_template (nama_template, jenis_tujuan, custom_layout, linked_pengajuan_template_id) VALUES ('$nama','$jenis','$layout_safe',$linked_val)";
             }
 
             if ($conn->query($q)) {
