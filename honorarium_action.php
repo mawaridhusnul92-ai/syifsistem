@@ -129,6 +129,10 @@ $res_hg = $conn->query("SHOW COLUMNS FROM honor_generate");
 if ($res_hg) { while($rc = $res_hg->fetch_assoc()) $cols_hg[] = $rc['Field']; }
 if (!in_array('template_id', $cols_hg))
     $conn->query("ALTER TABLE honor_generate ADD COLUMN template_id INT DEFAULT NULL AFTER komponen_id");
+if (!in_array('nama_honor', $cols_hg))
+    $conn->query("ALTER TABLE honor_generate ADD COLUMN nama_honor VARCHAR(200) DEFAULT '' AFTER nama_generate");
+if (!in_array('periode_semester', $cols_hg))
+    $conn->query("ALTER TABLE honor_generate ADD COLUMN periode_semester VARCHAR(100) DEFAULT '' AFTER nama_honor");
 
 // =============================================================
 // 7. MAIN ROUTER
@@ -343,13 +347,15 @@ try {
             $bulan   = postInt('bulan', date('n'));
             $tahun   = postInt('tahun', date('Y'));
             $catatan = esc($conn, postStr('catatan'));
+            $nama_honor      = esc($conn, postStr('nama_honor'));
+            $periode_semester = esc($conn, postStr('periode_semester'));
 
             if (empty($nama) || $tpl_id <= 0) {
                 echo json_encode(['status' => 'error', 'message' => 'Nama Batch dan Template wajib dipilih!']); break;
             }
 
             $kode = "GEN-{$tahun}-" . date('mdHis');
-            if ($conn->query("INSERT INTO honor_generate (kode_generate,nama_generate,template_id,periode_bulan,periode_tahun,tanggal_generate,catatan,status,total_honor,created_by) VALUES ('$kode','$nama',$tpl_id,$bulan,$tahun,NOW(),'$catatan','Draft',0,$uid)")) {
+            if ($conn->query("INSERT INTO honor_generate (kode_generate,nama_generate,nama_honor,periode_semester,template_id,periode_bulan,periode_tahun,tanggal_generate,catatan,status,total_honor,created_by) VALUES ('$kode','$nama','$nama_honor','$periode_semester',$tpl_id,$bulan,$tahun,NOW(),'$catatan','Draft',0,$uid)")) {
                 echo json_encode(['status' => 'success', 'message' => 'Batch generate berhasil dibuat!', 'id' => $conn->insert_id]);
             } else {
                 echo json_encode(['status' => 'error', 'message' => 'Gagal: ' . $conn->error]);
@@ -357,13 +363,15 @@ try {
             break;
 
         case 'edit_generate_header':
-            $id     = postInt('id');
-            $nama   = esc($conn, postStr('nama'));
-            $tpl_id = postInt('template_id');
-            $bulan  = postInt('bulan');
-            $tahun  = postInt('tahun');
+            $id              = postInt('id');
+            $nama            = esc($conn, postStr('nama'));
+            $tpl_id          = postInt('template_id');
+            $bulan           = postInt('bulan');
+            $tahun           = postInt('tahun');
+            $nama_honor      = esc($conn, postStr('nama_honor'));
+            $periode_semester = esc($conn, postStr('periode_semester'));
 
-            if ($conn->query("UPDATE honor_generate SET nama_generate='$nama',template_id=$tpl_id,periode_bulan=$bulan,periode_tahun=$tahun WHERE id=$id")) {
+            if ($conn->query("UPDATE honor_generate SET nama_generate='$nama',template_id=$tpl_id,periode_bulan=$bulan,periode_tahun=$tahun,nama_honor='$nama_honor',periode_semester='$periode_semester' WHERE id=$id")) {
                 echo json_encode(['status' => 'success', 'message' => 'Header Generate diperbarui.']);
             } else {
                 echo json_encode(['status' => 'error', 'message' => 'Gagal update: ' . $conn->error]);
@@ -472,7 +480,9 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Gagal simpan detail: ' . $err_msg]);
             } else {
                 $new_status = $is_final ? 'Final' : 'Draft';
-                $conn->query("UPDATE honor_generate SET total_honor=$total_all, status='$new_status' WHERE id=$gen_id");
+                $nama_honor_save      = esc($conn, postStr('nama_honor'));
+                $periode_semester_save = esc($conn, postStr('periode_semester'));
+                $conn->query("UPDATE honor_generate SET total_honor=$total_all, status='$new_status', nama_honor='$nama_honor_save', periode_semester='$periode_semester_save' WHERE id=$gen_id");
                 $conn->query("COMMIT");
                 $msg = $is_final
                     ? 'Generate difinalisasi! Slip Honor telah diterbitkan untuk semua dosen.'

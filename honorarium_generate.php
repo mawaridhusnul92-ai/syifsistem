@@ -27,8 +27,7 @@ if($res_gen) while($r = $res_gen->fetch_assoc()) $generate_list[] = $r;
 $templates = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY nama_template ASC")->fetch_all(MYSQLI_ASSOC);
 
 if ($view_mode == 'detail' && $gen_id > 0) {
-    $gen_head = $conn->query("SELECT g.*, t.nama_template, t.custom_layout, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id WHERE g.id = $gen_id")->fetch_assoc();
-    
+    $gen_head = $conn->query("SELECT g.*, t.nama_template, t.custom_layout, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id WHERE g.id = $gen_id")->fetch_assoc();    
     $matrix_details = [];
     $res_det = $conn->query("SELECT d.*, ds.nama as dosen_nama, ds.nip, ds.jabatan_fungsional as dosen_jabatan FROM honor_generate_detail d LEFT JOIN dosen ds ON d.dosen_id = ds.id WHERE d.generate_id = $gen_id ORDER BY d.id ASC");
     if($res_det) {
@@ -155,6 +154,14 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                         <input type="text" name="nama" id="inpNamaGen" class="form-control rounded-3 border fw-bold px-3 py-2" required placeholder="Contoh: Pembayaran Honor Smt Ganjil">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label small fw-bold text-primary">Nama Dokumen Honor <small class="text-muted">(tampil di header PDF)</small></label>
+                        <input type="text" name="nama_honor" id="inpNamaHonorGen" class="form-control rounded-3 border fw-bold px-3 py-2" placeholder="Contoh: Honor Pembuat Soal">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-primary">Periode Semester <small class="text-muted">(tampil di header PDF)</small></label>
+                        <input type="text" name="periode_semester" id="inpPeriodeSemesterGen" class="form-control rounded-3 border fw-bold px-3 py-2" placeholder="Contoh: Ganjil 2025/2026">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label small fw-bold text-primary">Pilih Layout Template Tabel <span class="text-danger">*</span></label>
                         <select name="template_id" id="inpTemplateGen" class="form-select rounded-3 border-primary shadow-sm fw-bold px-3 py-2 bg-white" required>
                             <option value="">-- Pilih Template --</option>
@@ -195,7 +202,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         });
     }
     function showModalGenerate() { document.getElementById('formNewGen').reset(); document.getElementById('actionGen').value = 'init_generate'; document.getElementById('titleGen').innerHTML = '<i class="fas fa-cogs me-2 text-warning"></i>Buat Batch Generate Honor'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
-    function editHeaderGen(g) { document.getElementById('actionGen').value = 'edit_generate_header'; document.getElementById('editGenId').value = g.id; document.getElementById('inpNamaGen').value = g.nama_generate; document.getElementById('inpTemplateGen').value = g.template_id; document.getElementById('inpBlnGen').value = g.periode_bulan; document.getElementById('inpThnGen').value = g.periode_tahun; document.getElementById('titleGen').innerHTML = '<i class="fas fa-edit me-2 text-warning"></i>Edit Batch Generate'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
+    function editHeaderGen(g) { document.getElementById('actionGen').value = 'edit_generate_header'; document.getElementById('editGenId').value = g.id; document.getElementById('inpNamaGen').value = g.nama_generate; document.getElementById('inpNamaHonorGen').value = g.nama_honor || ''; document.getElementById('inpPeriodeSemesterGen').value = g.periode_semester || ''; document.getElementById('inpTemplateGen').value = g.template_id; document.getElementById('inpBlnGen').value = g.periode_bulan; document.getElementById('inpThnGen').value = g.periode_tahun; document.getElementById('titleGen').innerHTML = '<i class="fas fa-edit me-2 text-warning"></i>Edit Batch Generate'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
     function batalGenerate(id) { Swal.fire({ title: 'Batalkan Generate?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Batalkan!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'batal_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.reload(); }); } }); }
     function hapusGenerate(id) { Swal.fire({ title: 'Hapus Draf?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'delete_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.href='?page=honorarium&tab=generate'; }); } }); }
     </script>
@@ -299,6 +306,31 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                 <div class="small text-muted fw-bold">Periode: <span class="text-dark"><?= $periode_str ?></span></div>
             </div>
         </div>
+
+        <!-- FIELD: Nama Honor & Periode Semester untuk Header PDF -->
+        <div class="p-3 border-bottom bg-white">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold text-muted mb-1"><i class="fas fa-heading me-1 text-primary"></i>Nama Dokumen Honor <small class="text-danger">(tampil di header PDF)</small></label>
+                    <input type="text" id="inpNamaHonor" class="form-control fw-bold <?= $is_locked?'border-0 bg-light':'border-primary' ?>" 
+                           value="<?= htmlspecialchars($gen_head['nama_honor'] ?? '') ?>" 
+                           placeholder="Contoh: Honor Pembuat Soal"
+                           <?= $is_locked ? 'readonly' : '' ?>>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted mb-1"><i class="fas fa-calendar-alt me-1 text-primary"></i>Periode Semester <small class="text-danger">(tampil di header PDF)</small></label>
+                    <input type="text" id="inpPeriodeSemester" class="form-control fw-bold <?= $is_locked?'border-0 bg-light':'border-primary' ?>" 
+                           value="<?= htmlspecialchars($gen_head['periode_semester'] ?? '') ?>" 
+                           placeholder="Contoh: Ganjil 2025/2026"
+                           <?= $is_locked ? 'readonly' : '' ?>>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted mb-1"><i class="fas fa-calendar me-1 text-muted"></i>Periode Laporan (Bulan)</label>
+                    <div class="form-control bg-light fw-bold text-muted border-0"><?= $periode_str ?></div>
+                </div>
+            </div>
+        </div>
+
         <div class="p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div class="d-flex gap-2">
                 <a href="?page=honorarium&tab=generate" class="btn btn-light border fw-bold rounded-pill shadow-sm"><i class="fas fa-arrow-left me-2"></i>Kembali</a>
@@ -1426,6 +1458,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         });
 
         const fd  = new FormData(form);
+        // Tambahkan field nama_honor dan periode_semester dari input header
+        const namaHonorEl = document.getElementById('inpNamaHonor');
+        const periodeSmtEl = document.getElementById('inpPeriodeSemester');
+        if (namaHonorEl) fd.append('nama_honor', namaHonorEl.value);
+        if (periodeSmtEl) fd.append('periode_semester', periodeSmtEl.value);
         const btn = document.querySelector('[onclick="submitHonorDetail(0)"]');
         if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...'; btn.disabled = true; }
         fetch('honorarium_action.php', { method: 'POST', body: fd })

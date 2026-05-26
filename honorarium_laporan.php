@@ -83,17 +83,24 @@ $tot_gen = $conn->query("SELECT COUNT(id) FROM honor_generate WHERE status IN ('
             <h5 class="fw-bold text-success mb-3"><i class="fas fa-file-signature me-2"></i>Arsip Dokumen Pengajuan (Rekap) Honor</h5>
             <div class="table-responsive">
                 <table class="table table-hover text-center align-middle mb-0">
-                    <thead class="table-light"><tr><th>No</th><th class="text-start">Nama Batch / Dokumen Pengajuan</th><th>Periode</th><th>Jenis Template</th><th>Total Pengajuan (Netto)</th><th>Aksi Cetak</th></tr></thead>
+                    <thead class="table-light"><tr><th>No</th><th class="text-start">Nama Batch / Dokumen Pengajuan</th><th class="text-start">Nama Dosen</th><th>Periode</th><th>Jenis Template</th><th>Total Pengajuan (Netto)</th><th>Aksi Cetak</th></tr></thead>
                     <tbody>
-                        <?php if(empty($pengajuan_list)): ?><tr><td colspan="6" class="text-muted fst-italic py-4">Belum ada dokumen yang disimpan sebagai PENGAJUAN (Rekap Gabungan).</td></tr><?php endif; ?>
-                        <?php $n=1; foreach($pengajuan_list as $p): ?>
+                        <?php if(empty($pengajuan_list)): ?><tr><td colspan="7" class="text-muted fst-italic py-4">Belum ada dokumen yang disimpan sebagai PENGAJUAN (Rekap Gabungan).</td></tr><?php endif; ?>
+                        <?php $n=1; foreach($pengajuan_list as $p): 
+                            // Ambil daftar dosen unik dari batch ini
+                            $res_dosen_batch = $conn->query("SELECT DISTINCT ds.nama FROM honor_generate_detail hgd JOIN dosen ds ON hgd.dosen_id = ds.id WHERE hgd.generate_id = {$p['id']} ORDER BY ds.nama ASC");
+                            $dosen_names = [];
+                            if ($res_dosen_batch) while ($rd = $res_dosen_batch->fetch_assoc()) $dosen_names[] = htmlspecialchars($rd['nama']);
+                            $dosen_display = !empty($dosen_names) ? implode('<br>', $dosen_names) : '<span class="text-muted">-</span>';
+                        ?>
                         <tr>
-                            <td class="fw-bold"><?= $n++ ?></td>
-                            <td class="text-start fw-bold text-primary"><?= $p['nama_generate'] ?></td>
-                            <td><?= date('M Y', strtotime($p['periode_tahun'].'-'.$p['periode_bulan'].'-01')) ?></td>
-                            <td><span class="badge bg-light text-dark border"><i class="fas fa-table text-success me-1"></i><?= $p['nama_template'] ?></span></td>
-                            <td class="fw-bold text-success">Rp <?= number_format($p['total_honor'],0,',','.') ?></td>
-                            <td><button class="btn btn-sm btn-info text-white shadow-sm fw-bold rounded-pill px-3" onclick="window.open('print_honor.php?mode=pengajuan&gen_id=<?= $p['id'] ?>', '_blank')"><i class="fas fa-print me-1"></i> Cetak Rekap PDF</button></td>
+                            <td class="fw-bold align-top"><?= $n++ ?></td>
+                            <td class="text-start fw-bold text-primary align-top"><?= $p['nama_generate'] ?></td>
+                            <td class="text-start align-top" style="font-size:13px;"><?= $dosen_display ?></td>
+                            <td class="align-top"><?= date('M Y', strtotime($p['periode_tahun'].'-'.$p['periode_bulan'].'-01')) ?></td>
+                            <td class="align-top"><span class="badge bg-light text-dark border"><i class="fas fa-table text-success me-1"></i><?= $p['nama_template'] ?></span></td>
+                            <td class="fw-bold text-success align-top">Rp <?= number_format($p['total_honor'],0,',','.') ?></td>
+                            <td class="align-top"><button class="btn btn-sm btn-info text-white shadow-sm fw-bold rounded-pill px-3" onclick="window.open('print_honor.php?mode=pengajuan&gen_id=<?= $p['id'] ?>', '_blank')"><i class="fas fa-print me-1"></i> Cetak Rekap PDF</button></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
