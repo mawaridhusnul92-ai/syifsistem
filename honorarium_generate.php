@@ -82,7 +82,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     
     .th-group { background: #ffc107 !important; color: #000 !important; border-bottom: 2px solid #000 !important; }
     .cell-qty { min-width: 70px; text-align: center; } .cell-nom { min-width: 120px; text-align: right; } .cell-tot { min-width: 120px; text-align: right; font-weight: 800; background: #f8fafc; color: #0d6efd; white-space: nowrap; }
-    .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; min-width: 120px; display: block; }
+    .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; min-width: 130px; }
     .btn-action { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px;}
     /* Highlight sel jumlah saat ada nilai */
     .inp-jml-display { text-align: right; font-weight: 700; color: #0d6efd; background: transparent; border: none; width: 100%; padding: 0; }
@@ -286,8 +286,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
-    $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
+    $hdr1 .= "<th rowspan='2' style='min-width:130px; width:130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width:80px; width:80px;'>PAJAK (%)</th><th rowspan='2' style='min-width:130px; width:130px;'>POTONGAN</th><th rowspan='2' style='min-width:150px; width:150px;' class='text-end pe-4'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width:90px; width:90px; text-align:center;'>Aksi</th>";
 ?>
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
@@ -322,7 +322,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         <input type="hidden" name="finalize" id="inpFinalize" value="0">
 
         <div class="table-responsive" style="min-height: 400px; padding-bottom: 20px; overflow-x: auto;">
-            <table class="table table-gen mb-0" id="tblHonorDetail" style="min-width: 1500px;">
+            <table class="table table-gen mb-0" id="tblHonorDetail" style="min-width: 1800px; table-layout: auto;">
                 <thead class="table-light">
                     <tr><?= $hdr1 ?></tr>
                     <?php if(!empty($hdr2)) echo "<tr>$hdr2</tr>"; ?>
@@ -933,8 +933,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tdPajak.appendChild(inpPajak);
         tr1.appendChild(tdPajak);
 
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:130px; width:130px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:150px; width:150px;' }));
 
         if (!readOnly) {
             const btnDel = document.createElement('button');
@@ -1259,8 +1259,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         };
         const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:130px; width:130px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:150px; width:150px;' }));
 
         // Tombol aksi
         const btnDelSub = document.createElement('button');
