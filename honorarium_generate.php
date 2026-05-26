@@ -279,10 +279,13 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr1 .= "<th rowspan='2' class='col-teks'>".strtoupper($vert_group_info['header'])."</th>";
         $hdr1 .= "<th colspan='3' class='th-group'>".strtoupper($vert_group_info['name'])."</th>";
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
+        // Kolom total/pajak/potongan/netto ada di hdr2 (bukan rowspan, karena setiap baris vertikal punya sendiri)
+        $hdr2 .= "<th style='min-width:110px;'>TOTAL BRUTO</th><th style='min-width:80px;'>PAJAK (%)</th><th style='min-width:100px;'>POTONGAN</th><th style='min-width:120px;' class='text-success'>HONOR DITERIMA</th>";
+        if(!$is_locked) $hdr2 .= "<th style='min-width:70px;'>Aksi</th>";
+    } else {
+        $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
+        if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
     }
-
-    $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
 ?>
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
@@ -905,60 +908,129 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             }
         }
 
-        // ── Kolom grup Vertikal baris-1 ──────────────────────────────
-        if (vItems.length > 0) {
-            appendVertRow(tr1, vItems[0], d, id, rs);
-        }
+        // ── Kolom grup Vertikal baris-1 + Total/Pajak/Potongan/Netto per baris ──
+        // Jika ada grup vertikal: setiap baris vertikal punya kolom Total/Pajak/Pot/Netto
+        // sendiri (rowspan=1). Jika tidak ada grup vertikal: kolom tersebut rowspan=1 di tr1.
+        const hasVert = vItems.length > 0;
 
-        // ── Total Bruto, Pajak, Potongan, Netto ──────────────────────
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
-        tr1.appendChild(tdBruto);
+        if (hasVert) {
+            // ── Baris pertama: tambahkan kolom vertikal baris-1 ──────
+            appendVertRow(tr1, vItems[0], d, id, 1);
 
-        const inpPajak = document.createElement('input');
-        inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
-        inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        inpPajak.value = pajak_base; inpPajak.placeholder = '0';
-        inpPajak.setAttribute('inputmode', 'decimal');
-        if (readOnly) inpPajak.disabled = true;
-        inpPajak.oninput = inpPajak.onchange = function() {
-            this.value = this.value.replace(/[^0-9.]/g, '');
-            calcRow(id);
-        };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
-        tdPajak.appendChild(inpPajak);
-        tr1.appendChild(tdPajak);
+            // Total Bruto baris-1 (rowspan=1, tiap baris punya sendiri)
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total-row', style: 'white-space:nowrap; min-width:110px;' }));
 
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+            const inpPajak1 = document.createElement('input');
+            inpPajak1.type = 'text'; inpPajak1.name = 'pajak_pct[]';
+            inpPajak1.className = 'inp-gen text-center text-danger inp-pajak-pct';
+            inpPajak1.value = pajak_base; inpPajak1.placeholder = '0';
+            inpPajak1.setAttribute('inputmode', 'decimal');
+            if (readOnly) inpPajak1.disabled = true;
+            inpPajak1.oninput = inpPajak1.onchange = function() {
+                this.value = this.value.replace(/[^0-9.]/g, '');
+                calcRow(id);
+            };
+            const tdPajak1 = createCell('', { cls: 'align-middle' });
+            tdPajak1.appendChild(inpPajak1);
+            tr1.appendChild(tdPajak1);
 
-        if (!readOnly) {
-            const btnDel = document.createElement('button');
-            btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
-            btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
-            btnDel.innerHTML = '<i class="fas fa-trash"></i>';
-            btnDel.onclick = () => delHonorRow(id);
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan-row', style: 'white-space:nowrap; min-width:100px;' }));
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-2 fw-bold align-middle fs-6 text-success txt-netto-row', style: 'white-space:nowrap; min-width:120px;' }));
 
-            const btnAdd = document.createElement('button');
-            btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
-            btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
-            btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
-            btnAdd.onclick = () => addSubRowSameDosen(id);
+            // Aksi: rowspan=rs (sekali per dosen, merge semua baris vertikal)
+            if (!readOnly) {
+                const btnDel = document.createElement('button');
+                btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
+                btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
+                btnDel.innerHTML = '<i class="fas fa-trash"></i>';
+                btnDel.onclick = () => delHonorRow(id);
 
-            const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs });
-            tdAksi.style.cssText = 'min-width:70px;';
+                const btnAdd = document.createElement('button');
+                btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
+                btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
+                btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
+                btnAdd.onclick = () => addSubRowSameDosen(id);
 
-            const wrapDiv = document.createElement('div');
-            wrapDiv.className = 'd-flex justify-content-center gap-1';
-            wrapDiv.appendChild(btnDel);
-            wrapDiv.appendChild(btnAdd);
-            tdAksi.appendChild(wrapDiv);
-            tr1.appendChild(tdAksi);
-        }
+                const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs });
+                tdAksi.style.cssText = 'min-width:70px;';
+                const wrapDiv = document.createElement('div');
+                wrapDiv.className = 'd-flex justify-content-center gap-1';
+                wrapDiv.appendChild(btnDel);
+                wrapDiv.appendChild(btnAdd);
+                tdAksi.appendChild(wrapDiv);
+                tr1.appendChild(tdAksi);
+            }
 
-        // ── Baris ke-2 s/d N untuk grup vertikal ─────────────────────
-        for (let i = 1; i < vItems.length; i++) {
-            const trN = mkTr();
-            appendVertRow(trN, vItems[i], d, id, 1);
+            // ── Baris ke-2 s/d N: vertikal + Total/Pajak/Pot/Netto per baris ──
+            for (let i = 1; i < vItems.length; i++) {
+                const trN = mkTr();
+                appendVertRow(trN, vItems[i], d, id, 1);
+
+                // Total, Pajak, Potongan, Netto untuk baris ini
+                trN.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total-row', style: 'white-space:nowrap; min-width:110px;' }));
+
+                const inpPajakN = document.createElement('input');
+                inpPajakN.type = 'text'; inpPajakN.name = 'pajak_pct[]';
+                inpPajakN.className = 'inp-gen text-center text-danger inp-pajak-pct';
+                inpPajakN.value = pajak_base; inpPajakN.placeholder = '0';
+                inpPajakN.setAttribute('inputmode', 'decimal');
+                if (readOnly) inpPajakN.disabled = true;
+                inpPajakN.oninput = inpPajakN.onchange = function() {
+                    this.value = this.value.replace(/[^0-9.]/g, '');
+                    calcRow(id);
+                };
+                const tdPajak1N = createCell('', { cls: 'align-middle' });
+                tdPajak1N.appendChild(inpPajakN);
+                trN.appendChild(tdPajak1N);
+
+                trN.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan-row', style: 'white-space:nowrap; min-width:100px;' }));
+                trN.appendChild(createCell('Rp 0', { cls: 'text-end pe-2 fw-bold align-middle fs-6 text-success txt-netto-row', style: 'white-space:nowrap; min-width:120px;' }));
+            }
+
+        } else {
+            // ── Tidak ada grup vertikal: Total/Pajak/Potongan/Netto di tr1 (rowspan=1) ──
+            const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' });
+            tr1.appendChild(tdBruto);
+
+            const inpPajak = document.createElement('input');
+            inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
+            inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
+            inpPajak.value = pajak_base; inpPajak.placeholder = '0';
+            inpPajak.setAttribute('inputmode', 'decimal');
+            if (readOnly) inpPajak.disabled = true;
+            inpPajak.oninput = inpPajak.onchange = function() {
+                this.value = this.value.replace(/[^0-9.]/g, '');
+                calcRow(id);
+            };
+            const tdPajak = createCell('', { cls: 'align-middle' });
+            tdPajak.appendChild(inpPajak);
+            tr1.appendChild(tdPajak);
+
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', style: 'white-space:nowrap; min-width:120px;' }));
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', style: 'white-space:nowrap; min-width:140px;' }));
+
+            if (!readOnly) {
+                const btnDel = document.createElement('button');
+                btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
+                btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
+                btnDel.innerHTML = '<i class="fas fa-trash"></i>';
+                btnDel.onclick = () => delHonorRow(id);
+
+                const btnAdd = document.createElement('button');
+                btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
+                btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
+                btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
+                btnAdd.onclick = () => addSubRowSameDosen(id);
+
+                const tdAksi = createCell('', { cls: 'text-center align-middle' });
+                tdAksi.style.cssText = 'min-width:70px;';
+                const wrapDiv = document.createElement('div');
+                wrapDiv.className = 'd-flex justify-content-center gap-1';
+                wrapDiv.appendChild(btnDel);
+                wrapDiv.appendChild(btnAdd);
+                tdAksi.appendChild(wrapDiv);
+                tr1.appendChild(tdAksi);
+            }
         }
 
         // ── Masukkan tbody ke dalam table ─────────────────────────────
@@ -1238,46 +1310,95 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         }
 
         // Kolom vertikal baris-1
-        if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
+        if (vItems.length > 0) {
+            appendVertRow(tr1, vItems[0], null, newId, 1);
 
-        // Total, Pajak, Potongan, Netto
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
-        tr1.appendChild(tdBruto);
-        const inpPajak = document.createElement('input');
-        inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
-        inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        inpPajak.value = pajakVal; inpPajak.placeholder = '0';
-        inpPajak.setAttribute('inputmode', 'decimal');
-        inpPajak.oninput = inpPajak.onchange = function() {
-            this.value = this.value.replace(/[^0-9.]/g, '');
-            calcRow(newId);
-        };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
-        tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px;' }));
+            // Total, Pajak, Potongan, Netto per baris (rowspan=1 tiap baris vertikal)
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total-row', style: 'white-space:nowrap; min-width:110px;' }));
+            const inpPajakSub1 = document.createElement('input');
+            inpPajakSub1.type = 'text'; inpPajakSub1.name = 'pajak_pct[]';
+            inpPajakSub1.className = 'inp-gen text-center text-danger inp-pajak-pct';
+            inpPajakSub1.value = pajakVal; inpPajakSub1.placeholder = '0';
+            inpPajakSub1.setAttribute('inputmode', 'decimal');
+            inpPajakSub1.oninput = inpPajakSub1.onchange = function() {
+                this.value = this.value.replace(/[^0-9.]/g, '');
+                calcRow(newId);
+            };
+            const tdPajakSub1 = createCell('', { cls: 'align-middle' });
+            tdPajakSub1.appendChild(inpPajakSub1); tr1.appendChild(tdPajakSub1);
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan-row', style: 'white-space:nowrap; min-width:100px;' }));
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-2 fw-bold align-middle fs-6 text-success txt-netto-row', style: 'white-space:nowrap; min-width:120px;' }));
 
-        // Tombol aksi
-        const btnDelSub = document.createElement('button');
-        btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
-        btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
-        btnDelSub.innerHTML = '<i class="fas fa-trash"></i>';
-        btnDelSub.onclick = () => { tbody.remove(); reindexRows(); calcSummary(); };
-        const btnAddSub = document.createElement('button');
-        btnAddSub.type = 'button'; btnAddSub.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
-        btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
-        btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
-        btnAddSub.onclick = () => addSubRowSameDosen(newId);
-        const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:70px;' });
-        const wrapDiv = document.createElement('div');
-        wrapDiv.className = 'd-flex justify-content-center gap-1';
-        wrapDiv.appendChild(btnDelSub); wrapDiv.appendChild(btnAddSub);
-        tdAksi.appendChild(wrapDiv); tr1.appendChild(tdAksi);
+            // Aksi: rowspan=rs (sekali per dosen)
+            const btnDelSub = document.createElement('button');
+            btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
+            btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
+            btnDelSub.innerHTML = '<i class="fas fa-trash"></i>';
+            btnDelSub.onclick = () => { tbody.remove(); reindexRows(); calcSummary(); };
+            const btnAddSub = document.createElement('button');
+            btnAddSub.type = 'button'; btnAddSub.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
+            btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
+            btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
+            btnAddSub.onclick = () => addSubRowSameDosen(newId);
+            const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:70px;' });
+            const wrapDiv = document.createElement('div');
+            wrapDiv.className = 'd-flex justify-content-center gap-1';
+            wrapDiv.appendChild(btnDelSub); wrapDiv.appendChild(btnAddSub);
+            tdAksi.appendChild(wrapDiv); tr1.appendChild(tdAksi);
 
-        // Baris vertikal ke-2 dst
-        for (let i = 1; i < vItems.length; i++) {
-            const trN = mkTr();
-            appendVertRow(trN, vItems[i], null, newId, 1);
+            // Baris vertikal ke-2 dst
+            for (let i = 1; i < vItems.length; i++) {
+                const trN = mkTr();
+                appendVertRow(trN, vItems[i], null, newId, 1);
+                trN.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total-row', style: 'white-space:nowrap; min-width:110px;' }));
+                const inpPajakSubN = document.createElement('input');
+                inpPajakSubN.type = 'text'; inpPajakSubN.name = 'pajak_pct[]';
+                inpPajakSubN.className = 'inp-gen text-center text-danger inp-pajak-pct';
+                inpPajakSubN.value = pajakVal; inpPajakSubN.placeholder = '0';
+                inpPajakSubN.setAttribute('inputmode', 'decimal');
+                inpPajakSubN.oninput = inpPajakSubN.onchange = function() {
+                    this.value = this.value.replace(/[^0-9.]/g, '');
+                    calcRow(newId);
+                };
+                const tdPajakSubN = createCell('', { cls: 'align-middle' });
+                tdPajakSubN.appendChild(inpPajakSubN); trN.appendChild(tdPajakSubN);
+                trN.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan-row', style: 'white-space:nowrap; min-width:100px;' }));
+                trN.appendChild(createCell('Rp 0', { cls: 'text-end pe-2 fw-bold align-middle fs-6 text-success txt-netto-row', style: 'white-space:nowrap; min-width:120px;' }));
+            }
+
+        } else {
+            // Non-vertikal
+            const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' });
+            tr1.appendChild(tdBruto);
+            const inpPajak = document.createElement('input');
+            inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
+            inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
+            inpPajak.value = pajakVal; inpPajak.placeholder = '0';
+            inpPajak.setAttribute('inputmode', 'decimal');
+            inpPajak.oninput = inpPajak.onchange = function() {
+                this.value = this.value.replace(/[^0-9.]/g, '');
+                calcRow(newId);
+            };
+            const tdPajak = createCell('', { cls: 'align-middle' });
+            tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', style: 'white-space:nowrap; min-width:120px;' }));
+            tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', style: 'white-space:nowrap; min-width:140px;' }));
+
+            const btnDelSub = document.createElement('button');
+            btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
+            btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
+            btnDelSub.innerHTML = '<i class="fas fa-trash"></i>';
+            btnDelSub.onclick = () => { tbody.remove(); reindexRows(); calcSummary(); };
+            const btnAddSub = document.createElement('button');
+            btnAddSub.type = 'button'; btnAddSub.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
+            btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
+            btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
+            btnAddSub.onclick = () => addSubRowSameDosen(newId);
+            const tdAksi = createCell('', { cls: 'text-center align-middle', style: 'min-width:70px;' });
+            const wrapDiv = document.createElement('div');
+            wrapDiv.className = 'd-flex justify-content-center gap-1';
+            wrapDiv.appendChild(btnDelSub); wrapDiv.appendChild(btnAddSub);
+            tdAksi.appendChild(wrapDiv); tr1.appendChild(tdAksi);
         }
 
         // Sisipkan tbody baru SETELAH tbody induk
@@ -1324,19 +1445,52 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             jmlInp.style.color = jml > 0 ? '#0d6efd' : '#94a3b8';
         });
 
-        // Hitung pajak & netto
-        const pajakInp = tbody.querySelector('.inp-pajak-pct');
-        const pct      = pajakInp ? cleanPct(pajakInp.value) : 0;
-        const potongan = Math.round(total_bruto * pct / 100);
-        const netto    = total_bruto - potongan;
+        // ── Mode vertikal: hitung & update per baris ─────────────────
+        const hasVertRows = tbody.querySelectorAll('.txt-total-row').length > 0;
+        if (hasVertRows) {
+            // Tiap baris vertikal punya kolom total/pajak/pot/netto sendiri.
+            // Kita perlu menghitung per-baris berdasarkan td yang ada di tiap <tr>.
+            const trs = Array.from(tbody.querySelectorAll('tr'));
+            // Baris vertikal: setiap <tr> yang punya .inp-jml-display (kolom jml vertikal)
+            // dan .txt-total-row (kolom total per baris)
+            trs.forEach(tr => {
+                const jmlInpRow = tr.querySelector('.inp-jml-display');
+                const txtBrutoRow = tr.querySelector('.txt-total-row');
+                const pajakInpRow = tr.querySelector('.inp-pajak-pct');
+                const txtPotRow   = tr.querySelector('.txt-potongan-row');
+                const txtNetRow   = tr.querySelector('.txt-netto-row');
+                if (!jmlInpRow || !txtBrutoRow) return; // baris tanpa kolom total
 
-        const txtBruto = tbody.querySelector('.txt-total');
-        const txtPot   = tbody.querySelector('.txt-potongan');
-        const txtNet   = tbody.querySelector('.txt-netto');
+                const rowBruto  = cleanNum(jmlInpRow.value) || 0;
+                const pctRow    = pajakInpRow ? cleanPct(pajakInpRow.value) : 0;
+                const potongan  = Math.round(rowBruto * pctRow / 100);
+                const netto     = rowBruto - potongan;
 
-        if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(total_bruto);
-        if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
-        if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
+                txtBrutoRow.innerText = 'Rp ' + fmtRp(rowBruto);
+                if (txtPotRow) txtPotRow.innerText = 'Rp ' + fmtRp(potongan);
+                if (txtNetRow) txtNetRow.innerText = 'Rp ' + fmtRp(netto);
+            });
+
+            // total_bruto sudah terhitung di atas (sum semua ridInp)
+            // Untuk summary: ambil sum semua txt-netto-row
+            let totalNetto = 0;
+            tbody.querySelectorAll('.txt-netto-row').forEach(el => totalNetto += cleanNum(el.innerText));
+            // Simpan di txt-total tersembunyi untuk calcSummary (jika tidak ada fallback ke total_bruto)
+        } else {
+            // ── Mode non-vertikal: kolom total/pajak/pot/netto di tr1 ──
+            const pajakInp = tbody.querySelector('.inp-pajak-pct');
+            const pct      = pajakInp ? cleanPct(pajakInp.value) : 0;
+            const potongan = Math.round(total_bruto * pct / 100);
+            const netto    = total_bruto - potongan;
+
+            const txtBruto = tbody.querySelector('.txt-total');
+            const txtPot   = tbody.querySelector('.txt-potongan');
+            const txtNet   = tbody.querySelector('.txt-netto');
+
+            if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(total_bruto);
+            if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
+            if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
+        }
 
         calcSummary();
     }
@@ -1348,10 +1502,18 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         let sumB = 0, sumP = 0, count = 0;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(r => {
             count++;
-            const b = r.querySelector('.txt-total');
-            const p = r.querySelector('.txt-potongan');
-            if (b) sumB += cleanNum(b.innerText);
-            if (p) sumP += cleanNum(p.innerText);
+            // Mode vertikal: sum semua txt-netto-row untuk netto, sum semua txt-total-row untuk bruto
+            const vertBrutos = r.querySelectorAll('.txt-total-row');
+            const vertPots   = r.querySelectorAll('.txt-potongan-row');
+            if (vertBrutos.length > 0) {
+                vertBrutos.forEach(el => sumB += cleanNum(el.innerText));
+                vertPots.forEach(el => sumP += cleanNum(el.innerText));
+            } else {
+                const b = r.querySelector('.txt-total');
+                const p = r.querySelector('.txt-potongan');
+                if (b) sumB += cleanNum(b.innerText);
+                if (p) sumP += cleanNum(p.innerText);
+            }
         });
         document.getElementById('sumDosen').innerText = count + ' Dosen';
         document.getElementById('sumBruto').innerText = 'Rp ' + fmtRp(sumB);
