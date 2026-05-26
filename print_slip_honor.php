@@ -259,9 +259,10 @@ table.tbl td { border:1px solid #000; padding:4px 6px; vertical-align:middle; }
 /* Kolom tipe */
 .td-no     { text-align:center; font-weight:700; }
 .td-teks   { text-align:center; }
-.td-num    { text-align:right; white-space:nowrap; }
-.td-jml    { color:#0d47a1; }
-.td-bruto  { font-weight:700; background: #e3f2fd !important; }
+.td-num    { text-align:center; white-space:nowrap; }
+.td-num-rp { text-align:right; white-space:nowrap; }
+.td-jml    { color:#0d47a1; text-align:right; }
+.td-bruto  { font-weight:700; background: #e3f2fd !important; text-align:right; }
 .td-vert-label { font-weight:700; background:#f9f9e8; }
 .td-subtotal { background-color: #EAF2FB !important; font-weight: bold; text-align: right; }
 
@@ -407,14 +408,14 @@ foreach ($slips as $did => $dosen_data):
                                     $jml   = $qty * $tarif;
                                     $sat   = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
 
-                                    // Qty: tampilkan angka + label satuan, atau '-' jika 0
+                                    // Qty: tampilkan angka + label satuan di center, atau '-' jika 0
                                     $qty_disp  = ($qty > 0) ? rp($qty) . ($sat ? '<br><span style="font-size:8px;color:#666;">'.$sat.'</span>' : '') : '-';
                                     $trf_disp  = ($tarif > 0) ? rp($tarif) : '-';
                                     $jml_disp  = ($jml > 0) ? rp($jml) : '-';
 
                                     echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>$qty_disp</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>$trf_disp</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>$jml_disp</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num-rp'>$trf_disp</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num-rp td-jml'>$jml_disp</td>";
                                 }
                             }
                         }
@@ -432,17 +433,17 @@ foreach ($slips as $did => $dosen_data):
                             echo "<td class='td-vert-label'>".htmlspecialchars($v['label'])."</td>";
                             $qty_disp_v = ($qty > 0) ? rp($qty) . ($sat ? '<br><span style="font-size:8px;color:#666;">'.$sat.'</span>' : '') : '-';
                             echo "<td class='td-num'>$qty_disp_v</td>";
-                            echo "<td class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
-                            echo "<td class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
+                            echo "<td class='td-num-rp'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
+                            echo "<td class='td-num-rp td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
 
                             // Untuk layout vertikal: tampilkan bruto, pajak, netto per baris uraian
                             $row_pajak_pct = (float)$row_data['pajak_pct'];
                             $item_bruto    = $jml;
                             $item_pajak    = round($item_bruto * $row_pajak_pct / 100);
                             $item_netto    = $item_bruto - $item_pajak;
-                            echo "<td class='td-num td-bruto text-dark'>".($item_bruto > 0 ? rp($item_bruto) : '-')."</td>";
-                            echo "<td class='td-num text-danger fw-bold'>".($item_pajak > 0 ? rp($item_pajak) : '-')."</td>";
-                            echo "<td class='td-num fw-bold' style='background: #ccffcc !important;'>".($item_netto > 0 ? rp($item_netto) : '-')."</td>";
+                            echo "<td class='td-num-rp td-bruto text-dark'>".($item_bruto > 0 ? rp($item_bruto) : '-')."</td>";
+                            echo "<td class='td-num-rp text-danger fw-bold'>".($item_pajak > 0 ? rp($item_pajak) : '-')."</td>";
+                            echo "<td class='td-num-rp fw-bold' style='background: #ccffcc !important;'>".($item_netto > 0 ? rp($item_netto) : '-')."</td>";
                         } else if (!$has_vert) {
                             // Kosong jika tidak ada grup vertikal sama sekali
                         } else {
@@ -453,9 +454,9 @@ foreach ($slips as $did => $dosen_data):
                         
                         // Untuk layout NON-vertikal: render Total Bruto, Pajak, Netto di baris pertama (merge)
                         if (!$has_vert && $vi === 0) {
-                            echo "<td rowspan='$rs' class='td-num td-bruto text-dark'>".rp($row_data['row_bruto'])."</td>";
-                            echo "<td rowspan='$rs' class='td-num text-danger fw-bold'>".rp($row_data['row_pajak'])."</td>";
-                            echo "<td rowspan='$rs' class='td-num fw-bold' style='background: #ccffcc !important;'>".rp($row_data['row_netto'])."</td>";
+                            echo "<td rowspan='$rs' class='td-num-rp td-bruto text-dark'>".rp($row_data['row_bruto'])."</td>";
+                            echo "<td rowspan='$rs' class='td-num-rp text-danger fw-bold'>".rp($row_data['row_pajak'])."</td>";
+                            echo "<td rowspan='$rs' class='td-num-rp fw-bold' style='background: #ccffcc !important;'>".rp($row_data['row_netto'])."</td>";
                         }
                         
                         echo "</tr>";
@@ -468,12 +469,12 @@ foreach ($slips as $did => $dosen_data):
                         echo "<td class='td-vert-label fw-bold text-primary' style='text-align:center;'>TOTAL</td>";
                         // Kosongkan kolom qty, tarif, jml vertikal
                         echo "<td class='td-num fw-bold'>-</td>";
-                        echo "<td class='td-num fw-bold'>-</td>";
-                        echo "<td class='td-num fw-bold'>-</td>";
+                        echo "<td class='td-num-rp fw-bold'>-</td>";
+                        echo "<td class='td-num-rp fw-bold'>-</td>";
                         // Total bruto, pajak, netto (dijumlahkan)
-                        echo "<td class='td-num td-bruto text-dark fw-bold' style='background:#e3f2fd !important;'>".rp($row_data['row_bruto'])."</td>";
-                        echo "<td class='td-num text-danger fw-bold'>".rp($row_data['row_pajak'])."</td>";
-                        echo "<td class='td-num fw-bold' style='background: #b2f5b2 !important; font-size:11px;'>".rp($row_data['row_netto'])."</td>";
+                        echo "<td class='td-num-rp td-bruto text-dark fw-bold' style='background:#e3f2fd !important;'>".rp($row_data['row_bruto'])."</td>";
+                        echo "<td class='td-num-rp text-danger fw-bold'>".rp($row_data['row_pajak'])."</td>";
+                        echo "<td class='td-num-rp fw-bold' style='background: #b2f5b2 !important; font-size:11px;'>".rp($row_data['row_netto'])."</td>";
                         echo "</tr>";
                     }
                 }

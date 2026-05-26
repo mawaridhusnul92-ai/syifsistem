@@ -479,7 +479,23 @@ try {
 
             $kas_akun  = esc($conn, postStr('kas_akun'));
             $tgl_bayar = esc($conn, postStr('tgl_bayar', date('Y-m-d')));
-            $ref       = esc($conn, postStr('referensi', 'BKK-HON/' . date('Ymd/His')));
+
+            // Nomor referensi dengan prefix BKK- agar terbaca sebagai kas_keluar di Manajemen Kas
+            $ref_input = postStr('referensi');
+            if (empty($ref_input)) {
+                // Auto-generate nomor BKK agar tercatat di tab Pengeluaran Manajemen Kas
+                if (function_exists('getNextNumber')) {
+                    $ref = esc($conn, getNextNumber($conn, 'kas_keluar'));
+                } else {
+                    $ref = esc($conn, 'BKK-HON/' . date('Ymd') . '/' . date('His'));
+                }
+            } else {
+                $ref = esc($conn, $ref_input);
+            }
+
+            if (empty($kas_akun)) {
+                echo json_encode(['status' => 'error', 'message' => 'Akun kas/bank wajib dipilih!']); break;
+            }
 
             // Ambil data slip yang belum dibayar
             $res_slips = $conn->query("SELECT d.*, ds.nama as dosen_nama FROM honor_generate_detail d JOIN dosen ds ON d.dosen_id=ds.id WHERE d.id IN ($ids_str) AND d.status_bayar != 'Sudah Dibayar'");
@@ -487,60 +503,101 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Semua slip sudah dibayar atau tidak ditemukan.']); break;
             }
 
-            $total_bayar  = 0;
-            $nama_list    = [];
-            $slips_data   = [];
+            $total_bayar = 0;
+            $nama_list   = [];
             while ($s = $res_slips->fetch_assoc()) {
                 $total_bayar += (float)$s['honor_diterima'];
                 if (!in_array($s['dosen_nama'], $nama_list)) $nama_list[] = $s['dosen_nama'];
-                $slips_data[] = $s;
             }
 
             if ($total_bayar <= 0) {
                 echo json_encode(['status' => 'error', 'message' => 'Total honor = 0!']); break;
             }
 
-            $ket_jurnal = esc($conn, 'Pembayaran Honorarium: ' . implode(', ', array_slice($nama_list, 0, 3)) . (count($nama_list) > 3 ? ' dkk.' : ''));
+            $ket_jurnal = esc($conn, 'Pembayaran Honorarium a.n: ' . implode(', ', array_slice($nama_list, 0, 3)) . (count($nama_list) > 3 ? ' dkk.' : ''));
 
             $conn->query("START TRANSACTION");
-
-            // Update status bayar dulu (ini yang terpenting)
-            $conn->query("UPDATE honor_generate_detail SET status_bayar='Sudah Dibayar' WHERE id IN ($ids_str) AND status_bayar!='Sudah Dibayar'");
-
-            // Auto update header status
-            $conn->query("UPDATE honor_generate g SET status='Dibayarkan' WHERE id IN (SELECT DISTINCT generate_id FROM honor_generate_detail WHERE id IN ($ids_str)) AND (SELECT COUNT(*) FROM honor_generate_detail d2 WHERE d2.generate_id=g.id AND d2.status_bayar!='Sudah Dibayar') = 0");
-
-            // Coba posting jurnal — opsional, tidak gagalkan transaksi utama
             $jid = 0;
+
             try {
+                // ===========================================================
+                // POSTING JURNAL KAS KELUAR
+                // Struktur yang benar:
+                //   DEBIT  : Akun Beban Honor (biaya bertambah)
+                //   KREDIT : Akun Kas/Bank    (kas berkurang)
+                //
+                // jenis_transaksi = 'kas_keluar' → agar muncul di tab
+                // "Pengeluaran" Manajemen Kas & Bank dan ter-filter di
+                // cash_transactions.php ($filter_jenis = "j.jenis_transaksi='kas_keluar'
+                //  OR j.no_jurnal LIKE 'BKK%'")
+                // ===========================================================
                 $cek_jurnal_tbl = $conn->query("SHOW TABLES LIKE 'syifa_jurnal'");
-                if ($cek_jurnal_tbl && $cek_jurnal_tbl->num_rows > 0 && !empty($kas_akun)) {
-                    if ($conn->query("INSERT INTO syifa_jurnal (no_jurnal,tgl_jurnal,jenis_transaksi,keterangan,pihak_nama,total_debet,total_kredit,status,akun_utama_kode,user_id,is_deleted) VALUES ('$ref','$tgl_bayar','Pengeluaran','$ket_jurnal','Multi Dosen',$total_bayar,$total_bayar,'APPROVED','$kas_akun',$uid,0)")) {
+                if ($cek_jurnal_tbl && $cek_jurnal_tbl->num_rows > 0) {
+
+                    // Pastikan kolom user_id & is_deleted ada (aman untuk versi lama)
+                    $cols_j = [];
+                    $rc_j = $conn->query("SHOW COLUMNS FROM syifa_jurnal");
+                    if ($rc_j) while ($cj = $rc_j->fetch_assoc()) $cols_j[] = $cj['Field'];
+
+                    $has_user_id   = in_array('user_id', $cols_j);
+                    $has_is_del    = in_array('is_deleted', $cols_j);
+                    $has_status_col= in_array('status', $cols_j);
+
+                    // Build INSERT dinamis agar tidak crash jika kolom tidak ada
+                    $j_cols = "no_jurnal,tgl_jurnal,jenis_transaksi,keterangan,pihak_nama,total_debet,total_kredit,akun_utama_kode";
+                    $j_vals = "'$ref','$tgl_bayar','kas_keluar','$ket_jurnal','Multi Dosen',$total_bayar,$total_bayar,'$kas_akun'";
+                    if ($has_status_col) { $j_cols .= ",status"; $j_vals .= ",'APPROVED'"; }
+                    if ($has_user_id)    { $j_cols .= ",user_id"; $j_vals .= ",$uid"; }
+                    if ($has_is_del)     { $j_cols .= ",is_deleted"; $j_vals .= ",0"; }
+
+                    if ($conn->query("INSERT INTO syifa_jurnal ($j_cols) VALUES ($j_vals)")) {
                         $jid = $conn->insert_id;
+
+                        // KREDIT: Kas/Bank berkurang (uang keluar)
                         $conn->query("INSERT INTO syifa_jurnal_detail (jurnal_id,kode_akun,debit,kredit) VALUES ($jid,'$kas_akun',0,$total_bayar)");
 
-                        // Debit per COA Beban
-                        $res_coa = $conn->query("SELECT k.kode_akun_beban, SUM(d.honor_diterima) as tot FROM honor_generate_detail d LEFT JOIN honor_komponen k ON d.komponen_id=k.id WHERE d.id IN ($ids_str) GROUP BY k.kode_akun_beban");
+                        // DEBIT: Beban Honor per COA dari komponen
+                        $res_coa = $conn->query(
+                            "SELECT COALESCE(NULLIF(k.kode_akun_beban,''), '5-1000') AS coa_beban,
+                                    SUM(d.honor_diterima) AS tot
+                             FROM honor_generate_detail d
+                             LEFT JOIN honor_komponen k ON d.komponen_id = k.id
+                             WHERE d.id IN ($ids_str) AND d.status_bayar != 'Sudah Dibayar'
+                             GROUP BY coa_beban"
+                        );
                         if ($res_coa) {
                             while ($rc = $res_coa->fetch_assoc()) {
-                                $coa_b = !empty($rc['kode_akun_beban']) ? esc($conn, $rc['kode_akun_beban']) : '5-10000';
+                                $coa_b = esc($conn, $rc['coa_beban']);
                                 $nom_b = (float)$rc['tot'];
-                                $conn->query("INSERT INTO syifa_jurnal_detail (jurnal_id,kode_akun,debit,kredit) VALUES ($jid,'$coa_b',$nom_b,0)");
+                                if ($nom_b > 0) {
+                                    $conn->query("INSERT INTO syifa_jurnal_detail (jurnal_id,kode_akun,debit,kredit) VALUES ($jid,'$coa_b',$nom_b,0)");
+                                }
                             }
                         }
-
-                        if ($jid > 0) $conn->query("UPDATE honor_generate_detail SET jurnal_id=$jid WHERE id IN ($ids_str)");
                     }
                 }
+
+                // Update status bayar dan link ke jurnal
+                $conn->query("UPDATE honor_generate_detail SET status_bayar='Sudah Dibayar'" . ($jid > 0 ? ",jurnal_id=$jid" : "") . " WHERE id IN ($ids_str) AND status_bayar!='Sudah Dibayar'");
+
+                // Auto-update header status generate jika semua slip dalam batch sudah dibayar
+                $conn->query("UPDATE honor_generate g SET status='Dibayarkan'
+                    WHERE id IN (SELECT DISTINCT generate_id FROM honor_generate_detail WHERE id IN ($ids_str))
+                    AND (SELECT COUNT(*) FROM honor_generate_detail d2 WHERE d2.generate_id=g.id AND d2.status_bayar!='Sudah Dibayar') = 0");
+
+                $conn->query("COMMIT");
+
             } catch (Exception $je) {
-                // Jurnal gagal tapi pembayaran tetap jalan
+                $conn->query("ROLLBACK");
+                echo json_encode(['status' => 'error', 'message' => 'Gagal posting jurnal: ' . $je->getMessage()]);
+                break;
             }
 
-            $conn->query("COMMIT");
-
-            $total_fmt = number_format($total_bayar, 0, ',', '.');
-            $jurnal_info = $jid > 0 ? " Jurnal akuntansi #{$jid} otomatis dibuat." : "";
-            echo json_encode(['status' => 'success', 'message' => "Pembayaran Rp {$total_fmt} untuk " . count($nama_list) . " dosen berhasil!" . $jurnal_info]);
+            $total_fmt   = number_format($total_bayar, 0, ',', '.');
+            $jurnal_info = $jid > 0
+                ? " Jurnal pengeluaran kas #{$jid} ({$ref}) otomatis tercatat di Manajemen Kas & Bank."
+                : " (Jurnal tidak dibuat — periksa konfigurasi tabel akuntansi.)";
+            echo json_encode(['status' => 'success', 'message' => "Pembayaran Rp {$total_fmt} untuk " . count($nama_list) . " dosen berhasil!{$jurnal_info}"]);
             break;
 
         case 'batal_bayar':
@@ -552,8 +609,8 @@ try {
 
             $conn->query("START TRANSACTION");
             try {
-                // Hapus jurnal terkait
-                $res_jid = $conn->query("SELECT DISTINCT jurnal_id FROM honor_generate_detail WHERE id IN ($ids_str) AND jurnal_id IS NOT NULL");
+                // Hapus jurnal kas & detail yang terkait
+                $res_jid = $conn->query("SELECT DISTINCT jurnal_id FROM honor_generate_detail WHERE id IN ($ids_str) AND jurnal_id IS NOT NULL AND jurnal_id > 0");
                 if ($res_jid) {
                     while ($r = $res_jid->fetch_assoc()) {
                         $jid = (int)$r['jurnal_id'];
@@ -564,7 +621,7 @@ try {
                 $conn->query("UPDATE honor_generate_detail SET status_bayar='Belum Dibayar', jurnal_id=NULL WHERE id IN ($ids_str)");
                 $conn->query("UPDATE honor_generate g SET status='Final' WHERE id IN (SELECT DISTINCT generate_id FROM honor_generate_detail WHERE id IN ($ids_str))");
                 $conn->query("COMMIT");
-                echo json_encode(['status' => 'success', 'message' => 'Pembayaran dibatalkan. Jurnal otomatis di-rollback.']);
+                echo json_encode(['status' => 'success', 'message' => 'Pembayaran dibatalkan. Jurnal kas otomatis di-rollback.']);
             } catch (Exception $e) {
                 $conn->query("ROLLBACK");
                 echo json_encode(['status' => 'error', 'message' => 'Gagal rollback: ' . $e->getMessage()]);
