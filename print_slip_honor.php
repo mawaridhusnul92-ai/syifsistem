@@ -313,7 +313,7 @@ table.tbl td { border:1px solid #000; padding:4px 6px; vertical-align:middle; }
 /* Kolom tipe */
 .td-no     { text-align:center; font-weight:700; }
 .td-teks   { text-align:center; }
-.td-num    { text-align:right; white-space:nowrap; }
+.td-num    { text-align:center; white-space:nowrap; }
 .td-jml    { color:#0d47a1; }
 .td-bruto  { font-weight:700; background: #e3f2fd !important; }
 .td-vert-label { font-weight:700; background:#f9f9e8; }
@@ -407,9 +407,15 @@ foreach ($slips as $did => $dosen_data):
         $col_count = 0;
         $col_count += count($teks_cols);
         foreach ($horiz_groups as $gName => $items) {
-            $firstItem = $items[0] ?? null;
+            $firstItem  = $items[0] ?? null;
             $gSingleCol = !empty($firstItem['single_jafung_col']);
-            $col_count += $gSingleCol ? 3 : (count($items) * 3);
+            $gHeader    = trim($firstItem['group_header'] ?? '');
+            if ($gSingleCol) {
+                $col_count += 3;
+            } else {
+                $col_count += count($items) * 3;
+                if (!empty($gHeader)) $col_count += 1; // kolom uraian/jenis
+            }
         }
         if (!empty($vert_info['items'])) $col_count += 4; // label + qty + tarif + jml
         
@@ -435,17 +441,10 @@ foreach ($slips as $did => $dosen_data):
                 // Looping Per Baris Item (Berdasarkan Mata Kuliah/Prodi)
                 foreach ($gen['rows'] as $r_idx => $row_data) {
                     
-                    // Untuk layout vertikal: hitung hanya item yang benar-benar punya data (qty > 0)
-                    $active_vItems = [];
-                    if ($has_vert) {
-                        foreach ($vItems as $v) {
-                            $vrid = (int)$v['id_rincian'];
-                            $vk   = $row_data['komponen'][$vrid] ?? null;
-                            if ($vk && (float)$vk['qty'] > 0) {
-                                $active_vItems[] = $v;
-                            }
-                        }
-                    }
+                    // PERBAIKAN: Tampilkan SEMUA item vertikal dari layout, terlepas dari qty.
+                    // Jika toggle "Tarif berdasarkan Jabatan Fungsional?" dan "Gabung 1 Kolom" tidak dihidupkan,
+                    // semua komponen honor harus muncul sesuai urutan layout form setting.
+                    $active_vItems = $vItems; // Gunakan semua item dari layout
                     $rs = $has_vert ? max(count($active_vItems), 1) : 1;
                     
                     for ($vi = 0; $vi < $rs; $vi++) {
@@ -486,9 +485,15 @@ foreach ($slips as $did => $dosen_data):
                                     echo "<td rowspan='$rs_td' class='td-num'>".($found_tarif > 0 ? rp($found_tarif) : '-')."</td>";
                                     echo "<td rowspan='$rs_td' class='td-num td-jml'>".($found_jml > 0 ? rp($found_jml) : '-')."</td>";
                                 } else {
-                                    // FIX: Tampilkan SEMUA item dari layout (qty=0 → '-')
-                                    // Ini memastikan semua kolom komponen honor muncul di slip
+                                    // Mode normal: Tampilkan SEMUA item dari layout sesuai urutan setting form.
+                                    // Item dengan qty=0 tetap muncul dengan nilai '-' (tarif dari master).
                                     $rs_td = $has_vert ? ($rs + 1) : $rs;
+                                    $gHeader = trim($firstItem['group_header'] ?? '');
+                                    // Render kolom uraian/jenis jika group_header aktif
+                                    if (!empty($gHeader)) {
+                                        $uraian_val = $row_data['uraian_horiz'][urlencode($gName)] ?? $row_data['mata_kuliah'] ?? '-';
+                                        echo "<td rowspan='$rs_td' class='td-teks'>".htmlspecialchars($uraian_val)."</td>";
+                                    }
                                     foreach ($items as $it) {
                                         $rid   = (int)$it['id_rincian'];
                                         $k     = $row_data['komponen'][$rid] ?? null;
@@ -504,13 +509,13 @@ foreach ($slips as $did => $dosen_data):
                             }
                         }
                         
-                        // Render Kolom Vertikal (Hanya item dengan data)
+                        // Render Kolom Vertikal (Semua item dari layout, qty=0 tampil sebagai '-')
                         if ($has_vert && isset($active_vItems[$vi])) {
                             $v    = $active_vItems[$vi];
                             $rid  = (int)$v['id_rincian'];
                             $k    = $row_data['komponen'][$rid] ?? null;
-                            $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
-                            $qty  = $k ? $k['qty'] : 0;
+                            $tarif = (float)($k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0));
+                            $qty  = (float)($k ? $k['qty'] : 0);
                             $jml  = $qty * $tarif;
                             
                             echo "<td class='td-vert-label'>".htmlspecialchars($v['label'])."</td>";
@@ -529,7 +534,7 @@ foreach ($slips as $did => $dosen_data):
                         } else if (!$has_vert) {
                             // Kosong jika tidak ada grup vertikal sama sekali
                         } else {
-                             // Filler jika kolom vertikal habis
+                             // Filler jika kolom vertikal habis (tidak seharusnya terjadi karena active_vItems = semua vItems)
                              echo "<td></td><td></td><td></td><td></td>";
                              echo "<td></td><td></td><td></td>";
                         }
