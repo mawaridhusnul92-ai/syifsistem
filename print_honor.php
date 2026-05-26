@@ -24,6 +24,10 @@ $sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun,
         WHERE d.generate_id = $gen_id ORDER BY d.dosen_id ASC, d.id ASC";
 $res = $conn->query($sql);
 
+if (!$res) {
+    die("<h3 style='padding:50px;color:red;'>Query Error: " . htmlspecialchars($conn->error) . "</h3>");
+}
+
 $matrix = [];
 $dosen = [];
 $t_bruto = 0; $t_pajak = 0;
@@ -31,6 +35,10 @@ $t_bruto = 0; $t_pajak = 0;
 $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $layout_json = '';
 $nama_template_doc = '';
+
+if ($res->num_rows === 0) {
+    die("<h3 style='padding:50px;color:orange;'>Data tidak ditemukan untuk Generate ID: $gen_id. Pastikan data honor sudah disimpan.</h3>");
+}
 
 while($r = $res->fetch_assoc()) {
     $nama_gen_clean = strtoupper($r['nama_generate']);
@@ -60,7 +68,15 @@ while($r = $res->fetch_assoc()) {
     $layout_json = $r['custom_layout'] ?? '';
     $nama_template_doc = $r['nama_template'] ?? '';
     
-    $t_bruto += (double)$r['total_honor']; $t_pajak += (double)$r['potongan_pajak'];
+}
+
+// Hitung total dari matrix (lebih akurat, hindari duplikasi per baris komponen)
+$t_bruto = 0; $t_pajak = 0;
+foreach ($matrix as $gen_items) {
+    foreach ($gen_items as $item) {
+        $t_bruto += (double)$item['tot_bruto'];
+        $t_pajak += (double)$item['tot_pajak'];
+    }
 }
 $t_netto = $t_bruto - $t_pajak;
 
