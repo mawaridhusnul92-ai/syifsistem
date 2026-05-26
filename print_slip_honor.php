@@ -119,7 +119,7 @@ while ($r = $res->fetch_assoc()) {
 }
 
 $master_tarif = [];
-$res_t = $conn->query("SELECT id, besaran, rincian FROM honor_komponen_detail");
+$res_t = $conn->query("SELECT id, besaran, rincian, satuan FROM honor_komponen_detail");
 if ($res_t) { while($rt = $res_t->fetch_assoc()) $master_tarif[$rt['id']] = $rt; }
 
 // ==========================================
@@ -180,7 +180,7 @@ function terbilang($angka) {
 $tanggal_cetak = date('d') . ' ' . $nm_bln[(int)date('n')] . ' ' . date('Y');
 
 // FUNGSI RENDER DINAMIS TABEL
-function buildTableHeader($teks_cols, $horiz_groups, $vert_info) {
+function buildTableHeader($teks_cols, $horiz_groups, $vert_info, $master_tarif = []) {
     $row1 = ""; $row2 = ""; $need_row2 = false;
     
     foreach ($teks_cols as $t) {
@@ -192,8 +192,12 @@ function buildTableHeader($teks_cols, $horiz_groups, $vert_info) {
         $need_row2 = true;
         $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
         foreach ($items as $it) {
-            $lbl = strtoupper($it['label']);
-            $row2 .= "<th class='th-sub'>$lbl</th><th class='th-sub'>Rp / Satuan</th><th class='th-sub'>JUMLAH</th>";
+            $lbl  = strtoupper($it['label']);
+            $rid  = (int)($it['id_rincian'] ?? 0);
+            $sat  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : 'Satuan';
+            $row2 .= "<th class='th-sub'>$lbl<br><span style='font-weight:normal;font-size:8px;'>($sat)</span></th>";
+            $row2 .= "<th class='th-sub'>Rp / $sat</th>";
+            $row2 .= "<th class='th-sub'>JUMLAH</th>";
         }
     }
     
@@ -207,7 +211,10 @@ function buildTableHeader($teks_cols, $horiz_groups, $vert_info) {
             $row1 .= "<th rowspan='2'></th>";
         }
         $row1 .= "<th colspan='3' class='th-grup'>".strtoupper($vert_info['name'])."</th>";
-        $row2 .= "<th class='th-sub'>Jml/Qty</th><th class='th-sub'>Honor/Satuan</th><th class='th-sub'>Total Honor</th>";
+        // Ambil satuan dari item pertama grup vertikal
+        $first_v_rid = (int)($vert_info['items'][0]['id_rincian'] ?? 0);
+        $first_v_sat = !empty($master_tarif[$first_v_rid]['satuan']) ? $master_tarif[$first_v_rid]['satuan'] : 'Satuan';
+        $row2 .= "<th class='th-sub'>Jml ($first_v_sat)</th><th class='th-sub'>Rp/$first_v_sat</th><th class='th-sub'>Total Honor</th>";
     }
     
     $row1 .= "<th rowspan='2' style='min-width:90px'>TOTAL<br>BRUTO</th>";
@@ -348,7 +355,7 @@ foreach ($slips as $did => $dosen_data):
         foreach ($horiz_groups as $gName => $items) $col_count += (count($items) * 3);
         if (!empty($vert_info['items'])) $col_count += 4; // label + qty + tarif + jml
         
-        [$thead1, $thead2] = buildTableHeader($teks_cols, $horiz_groups, $vert_info);
+        [$thead1, $thead2] = buildTableHeader($teks_cols, $horiz_groups, $vert_info, $master_tarif);
         ?>
 
         <!-- NAMA GENERATE DI ATAS TABEL -->
@@ -370,17 +377,9 @@ foreach ($slips as $did => $dosen_data):
                 // Looping Per Baris Item (Berdasarkan Mata Kuliah/Prodi)
                 foreach ($gen['rows'] as $r_idx => $row_data) {
                     
-                    // Untuk layout vertikal: hitung hanya item yang benar-benar punya data (qty > 0)
-                    $active_vItems = [];
-                    if ($has_vert) {
-                        foreach ($vItems as $v) {
-                            $vrid = (int)$v['id_rincian'];
-                            $vk   = $row_data['komponen'][$vrid] ?? null;
-                            if ($vk && (float)$vk['qty'] > 0) {
-                                $active_vItems[] = $v;
-                            }
-                        }
-                    }
+                    // Untuk layout vertikal: ambil SEMUA item dari layout (ikuti urutan layout, bukan hanya yang qty>0)
+                    // Ini sesuai requirement: susunan mengikuti layout form setting, semua komponen ditampilkan
+                    $active_vItems = $vItems; // tampilkan semua, bukan hanya yang qty>0
                     $rs = $has_vert ? max(count($active_vItems), 1) : 1;
                     
                     for ($vi = 0; $vi < $rs; $vi++) {
@@ -398,33 +397,41 @@ foreach ($slips as $did => $dosen_data):
                                 echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-teks fw-bold'>$val</td>";
                             }
                             
-                            // Kolom Horizontal
+                            // Kolom Horizontal — tampilkan SEMUA komponen dari layout, qty=0 tampil sebagai '-'
                             foreach ($horiz_groups as $gName => $items) {
                                 foreach ($items as $it) {
-                                    $rid  = (int)$it['id_rincian'];
-                                    $k    = $row_data['komponen'][$rid] ?? null;
-                                    $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
-                                    $qty  = $k ? $k['qty'] : 0;
-                                    $jml  = $qty * $tarif;
+                                    $rid   = (int)$it['id_rincian'];
+                                    $k     = $row_data['komponen'][$rid] ?? null;
+                                    $tarif = $k ? $k['tarif'] : ((float)($master_tarif[$rid]['besaran'] ?? 0));
+                                    $qty   = $k ? $k['qty'] : 0;
+                                    $jml   = $qty * $tarif;
+                                    $sat   = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
 
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
+                                    // Qty: tampilkan angka + label satuan, atau '-' jika 0
+                                    $qty_disp  = ($qty > 0) ? rp($qty) . ($sat ? '<br><span style="font-size:8px;color:#666;">'.$sat.'</span>' : '') : '-';
+                                    $trf_disp  = ($tarif > 0) ? rp($tarif) : '-';
+                                    $jml_disp  = ($jml > 0) ? rp($jml) : '-';
+
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>$qty_disp</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>$trf_disp</td>";
+                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>$jml_disp</td>";
                                 }
                             }
                         }
                         
-                        // Render Kolom Vertikal (Hanya item dengan data)
+                        // Render Kolom Vertikal — semua item dari layout ditampilkan
                         if ($has_vert && isset($active_vItems[$vi])) {
                             $v    = $active_vItems[$vi];
                             $rid  = (int)$v['id_rincian'];
                             $k    = $row_data['komponen'][$rid] ?? null;
-                            $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
+                            $tarif = $k ? $k['tarif'] : ((float)($master_tarif[$rid]['besaran'] ?? 0));
                             $qty  = $k ? $k['qty'] : 0;
                             $jml  = $qty * $tarif;
+                            $sat  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
                             
                             echo "<td class='td-vert-label'>".htmlspecialchars($v['label'])."</td>";
-                            echo "<td class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
+                            $qty_disp_v = ($qty > 0) ? rp($qty) . ($sat ? '<br><span style="font-size:8px;color:#666;">'.$sat.'</span>' : '') : '-';
+                            echo "<td class='td-num'>$qty_disp_v</td>";
                             echo "<td class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
                             echo "<td class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
 
