@@ -8,28 +8,50 @@
  * $active_subtab diteruskan dari honorarium.php ('pengajuan' | 'kuitansi')
  */
 
-// ── Ambil semua template dipisah per jenis ──────────────────────────
-$tpl_pengajuan = $conn->query(
-    "SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC"
-)->fetch_all(MYSQLI_ASSOC);
+// ── AUTO-CREATE tabel honor_template jika belum ada ─────────────────
+$conn->query("CREATE TABLE IF NOT EXISTS honor_template (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama_template VARCHAR(150) NOT NULL,
+    jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN',
+    custom_layout MEDIUMTEXT NULL,
+    linked_pengajuan_template_id INT NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-$tpl_kuitansi = $conn->query(
+// Pastikan kolom linked_pengajuan_template_id ada (ALTER jika belum)
+$_cols_tpl = [];
+$_res_tpl_cols = $conn->query("SHOW COLUMNS FROM honor_template");
+if ($_res_tpl_cols) { while ($_rc = $_res_tpl_cols->fetch_assoc()) $_cols_tpl[] = $_rc['Field']; }
+if (!in_array('linked_pengajuan_template_id', $_cols_tpl))
+    $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
+if (!in_array('jenis_tujuan', $_cols_tpl))
+    $conn->query("ALTER TABLE honor_template ADD COLUMN jenis_tujuan ENUM('KUITANSI','PENGAJUAN') DEFAULT 'PENGAJUAN' AFTER nama_template");
+
+// ── Ambil semua template dipisah per jenis ──────────────────────────
+$tpl_pengajuan = [];
+$_res_tpl_p = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC");
+if ($_res_tpl_p) $tpl_pengajuan = $_res_tpl_p->fetch_all(MYSQLI_ASSOC);
+
+$tpl_kuitansi = [];
+$_res_tpl_k = $conn->query(
     "SELECT t.*, p.nama_template AS nama_pengajuan_acuan
      FROM honor_template t
      LEFT JOIN honor_template p ON t.linked_pengajuan_template_id = p.id
      WHERE t.jenis_tujuan='KUITANSI'
      ORDER BY t.id ASC"
-)->fetch_all(MYSQLI_ASSOC);
+);
+if ($_res_tpl_k) $tpl_kuitansi = $_res_tpl_k->fetch_all(MYSQLI_ASSOC);
 
 // ── Daftar komponen aktif untuk builder ────────────────────────────
 $master_komponen = [];
 $res_mk = $conn->query("SELECT * FROM honor_komponen WHERE is_active=1 ORDER BY nama_honor ASC");
 if ($res_mk) {
     while ($mk = $res_mk->fetch_assoc()) {
-        $details = $conn->query(
+        $_res_det = $conn->query(
             "SELECT id,rincian,jabatan_fungsional,besaran,potongan_pajak
              FROM honor_komponen_detail WHERE komponen_id={$mk['id']} ORDER BY id ASC"
-        )->fetch_all(MYSQLI_ASSOC);
+        );
+        $details = $_res_det ? $_res_det->fetch_all(MYSQLI_ASSOC) : [];
         $mk['details'] = $details;
         $master_komponen[$mk['id']] = $mk;
     }
