@@ -14,6 +14,12 @@
  * - input qty diberi class khusus "inp-qty-{rid}" agar query lebih eksplisit.
  * - calcRow dipanggil juga saat baris dimuat dari matrixDetails (load existing data).
  * - formatRpJS menerima angka float dengan benar (tidak strip desimal sblm format).
+ *
+ * LAYOUT FIX:
+ * - Kolom POTONGAN / HONOR DITERIMA / AKSI diberi border-left agar tidak tergeser secara visual.
+ * - min-width HONOR DITERIMA dinaikkan agar tidak terpotong.
+ * - Kolom TENAGA PENGAJAR menggunakan align-top + vertical-align:top agar
+ *   dropdown dosen sejajar baris pertama, bukan tengah, saat ada sub-rows.
  */
 
 $view_mode = $_GET['view'] ?? 'list';
@@ -22,6 +28,7 @@ $gen_id = (int)($_GET['id'] ?? 0);
 $generate_list = [];
 $res_gen = $conn->query("SELECT g.*, t.nama_template, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id ORDER BY g.id DESC");
 if($res_gen) while($r = $res_gen->fetch_assoc()) $generate_list[] = $r;
+
 
 // Hanya template PENGAJUAN yang digunakan untuk generate honor (input data 1x)
 $templates = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY nama_template ASC")->fetch_all(MYSQLI_ASSOC);
@@ -68,6 +75,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 }
 ?>
 
+
 <style>
     .table-gen th { background-color: #f8fafc !important; color: #475569 !important; font-size: 11px; text-transform: uppercase; padding: 12px 8px; border: 1px solid #e2e8f0; text-align: center; vertical-align: middle;}
     .table-gen td { font-size: 13px; vertical-align: middle; padding: 6px; border: 1px solid #e2e8f0; color: #1e293b; }
@@ -94,9 +102,17 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     input.inp-qty, input.inp-pajak-pct { -moz-appearance: textfield; appearance: textfield; }
     /* Warna khusus input qty agar lebih jelas saat diisi */
     input.inp-qty { color: #0d6efd; font-weight: 700; }
+
+    /* ── FIX: Tenaga Pengajar selalu rata atas ── */
+    .td-dosen { vertical-align: top !important; padding-top: 8px !important; }
+    /* ── FIX: Pemisah visual kolom POTONGAN | HONOR DITERIMA | AKSI ── */
+    .td-potongan { border-left: 2px solid #94a3b8 !important; min-width: 130px; white-space: nowrap; }
+    .td-netto    { border-left: 2px solid #94a3b8 !important; min-width: 155px; white-space: nowrap; }
+    .td-aksi     { border-left: 2px solid #94a3b8 !important; min-width: 80px; }
 </style>
 
 <div class="animate__animated animate__fadeIn">
+
 <?php if ($view_mode == 'list'): ?>
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="fw-bold mb-0 text-dark">Daftar Generate Honor</h5>
@@ -137,6 +153,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             </table>
         </div>
     </div>
+
 
     <script>
     const modalGenHTML = `
@@ -200,6 +217,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     function hapusGenerate(id) { Swal.fire({ title: 'Hapus Draf?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'delete_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.href='?page=honorarium&tab=generate'; }); } }); }
     </script>
 
+
 <?php elseif ($view_mode == 'detail'): 
     $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
     $periode_str = $nm_bln[$gen_head['periode_bulan']] . ' ' . $gen_head['periode_tahun'];
@@ -237,8 +255,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $gSingleCol = !empty($firstItem['single_jafung_col']);
         
         if ($gSingleCol) {
-            // Mode 1 Kolom: QTY (dengan satuan dari komponen) | TARIF | JUMLAH
-            // Ambil satuan dari rincian komponen pertama
             $first_rid   = (int)($items[0]['id_rincian'] ?? 0);
             $sat_map = ['Per Mahasiswa'=>'Mhs','Per SKS'=>'SKS','Per Pertemuan'=>'Pertemuan',
                         'Per Kegiatan'=>'Kegiatan','Per Jam'=>'Jam','Per Soal'=>'Soal','Lump Sum'=>'Ls'];
@@ -258,7 +274,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         } else {
             $cs = count($items) * 3;
             if (!empty($gHeader)) {
-                $cs += 1; // tambah 1 untuk kolom uraian
+                $cs += 1;
                 $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
                 $hdr2 .= "<th class='cell-qty' style='min-width:120px;'>".strtoupper($gHeader)."</th>";
             } else {
@@ -286,9 +302,14 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
-    $hdr1 .= "<th rowspan='2' style='min-width: 130px; white-space:nowrap;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px; white-space:nowrap;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px; white-space:nowrap;'>POTONGAN</th><th rowspan='2' style='min-width: 150px; white-space:nowrap;' class='text-end pe-3'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px; white-space:nowrap;'>Aksi</th>";
+    // FIX: Tambah white-space:nowrap + min-width lebih besar + border-left pada kolom akhir
+    $hdr1 .= "<th rowspan='2' style='min-width:130px; white-space:nowrap;'>TOTAL BRUTO</th>";
+    $hdr1 .= "<th rowspan='2' style='min-width:80px; white-space:nowrap;'>PAJAK (%)</th>";
+    $hdr1 .= "<th rowspan='2' class='th-separator' style='min-width:130px; white-space:nowrap; border-left:2px solid #94a3b8;'>POTONGAN</th>";
+    $hdr1 .= "<th rowspan='2' class='th-separator text-end pe-3' style='min-width:155px; white-space:nowrap; border-left:2px solid #94a3b8;'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th rowspan='2' class='th-separator' style='min-width:80px; white-space:nowrap; border-left:2px solid #94a3b8;'>Aksi</th>";
 ?>
+
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
             <div>
@@ -348,13 +369,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     </div>
 
 
+
     <script>
     // ================================================================
-    //  HONOR GENERATE — JAVASCRIPT ENGINE (FINAL STABLE v3)
-    //  Metode insert baris: createElement + appendChild
-    //  Ini satu-satunya cara aman memasukkan <tr> ke <tbody> di semua
-    //  browser. insertAdjacentHTML/innerHTML di-strip oleh HTML parser
-    //  saat target adalah <table> atau <tbody>.
+    //  HONOR GENERATE — JAVASCRIPT ENGINE
     // ================================================================
 
     const isLocked      = <?= $is_locked ? 'true' : 'false' ?>;
@@ -366,25 +384,20 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     const horizGroups = <?= json_encode($horiz_groups) ?>;
     const vertGroup   = <?= json_encode($vert_group_info) ?>;
     const masterTarif = <?= json_encode($rincian_master) ?>;
-    // Lookup tarif berdasarkan jabatan fungsional: jafungTarif[komp_id][jabatan] = {id, besaran, potongan_pajak}
     const jafungTarif = <?= json_encode($jafung_tarif_map ?? []) ?>;
 
     let rCount = 0;
 
-    // ── Helper format & clean angka ──────────────────────────────────
     function fmtRp(val) {
         return new Intl.NumberFormat('id-ID').format(Math.round(parseFloat(val) || 0));
     }
     function cleanNum(str) {
-        // Hapus semua karakter non-digit (titik ribuan, "Rp", spasi, dll)
         return parseFloat(String(str).replace(/[^0-9]/g, '')) || 0;
     }
     function cleanPct(str) {
-        // Untuk persen: izinkan titik desimal, ganti koma jadi titik
         return parseFloat(String(str).replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
     }
 
-    // ── Opsi dropdown dosen & prodi ──────────────────────────────────
     let dosenOpts = [{ val: '', lbl: '-- Pilih Dosen --', prodi: '', jabatan: '' }];
     dosenData.forEach(d => dosenOpts.push({
         val: d.id, lbl: d.nama,
@@ -394,269 +407,191 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
     function syncProdi(selDosen, rowId) {
         const opt = selDosen.options[selDosen.selectedIndex];
-        // Isi kolom Prodi
         const pInp = document.querySelector(`#hr_${rowId} .inp-prodi`);
         if (pInp) pInp.value = (opt && opt.value) ? (opt.dataset.prodi || '') : '';
-        // FIX: Isi dropdown Jabatan Fungsional otomatis dari data dosen
         const jSel = document.querySelector(`#hr_${rowId} .inp-jabatan`);
         const jabatan = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
-        if (jSel) {
-            jSel.value = jabatan;
-        }
-        // Update tarif per jabatan fungsional & filter komponen
+        if (jSel) jSel.value = jabatan;
         updateJafungTarif(rowId, jabatan);
         filterKomponenByJabatan(rowId, jabatan);
     }
 
-    /**
-     * updateJafungTarif — update nilai tarif pada sel-sel yang is_jafung=true
-     * berdasarkan jabatan fungsional dosen yang dipilih.
-     * FIX: Mencakup horizGroups DAN vertGroup, plus fallback is_jafung dari masterTarif.
-     */
     function updateJafungTarif(rowId, jabatan) {
         const tbody = document.getElementById(`hr_${rowId}`);
         if (!tbody) return;
-
         let pajakBaru = null;
-
-        // ── Helper: proses satu item komponen ────────────────────────
         function processItem(c) {
             const rid   = c.id_rincian;
             const mData = masterTarif[rid] || null;
             if (!mData) return;
-
-            // Cek is_jafung: dari template JSON atau dari masterTarif (fallback)
             const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
-            if (!isJafung) return; // skip jika bukan jafung
-
+            if (!isJafung) return;
             const kompId = String(mData.komp_id);
-
-            // Cari tarif yang cocok dengan jabatan dosen
-            let tarifBaru = mData.besaran;
-            let pajak     = mData.potongan_pajak;
-            let ridBaru   = String(rid);
-
+            let tarifBaru = mData.besaran, pajak = mData.potongan_pajak, ridBaru = String(rid);
             if (jabatan && jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
-                const jt  = jafungTarif[kompId][jabatan];
-                tarifBaru = jt.besaran;
-                pajak     = jt.potongan_pajak;
-                ridBaru   = String(jt.id);
+                const jt = jafungTarif[kompId][jabatan];
+                tarifBaru = jt.besaran; pajak = jt.potongan_pajak; ridBaru = String(jt.id);
             }
-
-            // Update hidden rincian_ids di td-qty dengan rid baru
             const tdQty = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
             if (tdQty) {
                 const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
                 if (hidRid) {
-                    // Ganti data-rid di semua td yang masih pakai rid lama
-                    if (ridBaru !== String(rid)) {
-                        tbody.querySelectorAll(`td[data-rid="${rid}"]`).forEach(td => {
-                            td.dataset.rid = ridBaru;
-                        });
-                    }
+                    if (ridBaru !== String(rid)) tbody.querySelectorAll(`td[data-rid="${rid}"]`).forEach(td => td.dataset.rid = ridBaru);
                     hidRid.value = ridBaru;
                 }
-                // BUGFIX: update qty/kompId input names to match new rid
-                if (ridBaru !== String(rid)) {
-                    const qtyInp = tdQty.querySelector('.inp-qty');
-                    if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
-                }
+                if (ridBaru !== String(rid)) { const qi = tdQty.querySelector('.inp-qty'); if (qi) qi.name = `komp_qty_${ridBaru}[]`; }
             }
-
-            // Update tarif di td-tarif (pakai ridBaru karena data-rid sudah diupdate)
             const tdTarif = tbody.querySelector(`td[data-rid="${ridBaru}"][data-role="td-tarif"]`);
             if (tdTarif) {
                 const trfInp = tdTarif.querySelector('.inp-tarif');
                 if (trfInp) {
                     trfInp.value = fmtRp(tarifBaru);
-                    // BUGFIX: update tarif/kompId input names to match new rid
                     if (ridBaru !== String(rid)) {
                         trfInp.name = `komp_tarif_${ridBaru}[]`;
-                        const kidInp = tdTarif.querySelector(`input[name="komp_kompId_${rid}[]"]`);
-                        if (kidInp) kidInp.name = `komp_kompId_${ridBaru}[]`;
+                        const ki = tdTarif.querySelector(`input[name="komp_kompId_${rid}[]"]`);
+                        if (ki) ki.name = `komp_kompId_${ridBaru}[]`;
                     }
-                    // Highlight visual singkat agar user tahu tarif berubah
-                    trfInp.style.background = '#fef9c3';
-                    trfInp.style.color = '#b45309';
-                    setTimeout(() => {
-                        trfInp.style.background = '';
-                        trfInp.style.color = '';
-                    }, 1500);
+                    trfInp.style.background = '#fef9c3'; trfInp.style.color = '#b45309';
+                    setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500);
                 }
             }
-
             if (pajakBaru === null) pajakBaru = pajak;
         }
-
-        // ── Proses semua grup horizontal ─────────────────────────────
         for (const g in horizGroups) {
             const firstItem = horizGroups[g][0] || {};
             const gSingleCol = firstItem.single_jafung_col || false;
-            
             if (gSingleCol && jabatan) {
-                // MODE SINGLE COL: update rid dan tarif berdasarkan jabatan
-                const items = horizGroups[g];
-                const mDataFirst = masterTarif[items[0].id_rincian] || null;
+                const items = horizGroups[g], mDataFirst = masterTarif[items[0].id_rincian] || null;
                 if (mDataFirst) {
                     const kompId = String(mDataFirst.komp_id);
                     if (jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
-                        const jt = jafungTarif[kompId][jabatan];
-                        const ridBaru = String(jt.id);
-                        const tarifBaru = jt.besaran;
+                        const jt = jafungTarif[kompId][jabatan], ridBaru = String(jt.id), tarifBaru = jt.besaran;
                         if (pajakBaru === null) pajakBaru = jt.potongan_pajak;
-                        
-                        // Find the single-col td by group name
                         const tdQty = tbody.querySelector(`td[data-single-col="true"][data-group-name="${g}"][data-role="td-qty"]`);
                         if (tdQty) {
                             const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
-                            const oldRid = tdQty.dataset.rid;
                             if (hidRid) hidRid.value = ridBaru;
-                            // Update data-rid on all related tds
-                            tbody.querySelectorAll(`td[data-single-col="true"][data-group-name="${g}"]`).forEach(td => {
-                                td.dataset.rid = ridBaru;
-                            });
-                            // Update input names to match new rid
-                            const qtyInp = tdQty.querySelector('.inp-qty');
-                            if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
+                            tbody.querySelectorAll(`td[data-single-col="true"][data-group-name="${g}"]`).forEach(td => td.dataset.rid = ridBaru);
+                            const qi = tdQty.querySelector('.inp-qty'); if (qi) qi.name = `komp_qty_${ridBaru}[]`;
                         }
                         const tdTarif = tbody.querySelector(`td[data-single-col="true"][data-group-name="${g}"][data-role="td-tarif"]`);
                         if (tdTarif) {
                             const trfInp = tdTarif.querySelector('.inp-tarif');
-                            if (trfInp) {
-                                trfInp.value = fmtRp(tarifBaru);
-                                trfInp.name = `komp_tarif_${ridBaru}[]`;
-                                trfInp.style.background = '#fef9c3';
-                                trfInp.style.color = '#b45309';
-                                setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500);
-                            }
-                            const kidInp = tdTarif.querySelector('input[type="hidden"]');
-                            if (kidInp) { kidInp.value = mDataFirst.komp_id; kidInp.name = `komp_kompId_${ridBaru}[]`; }
+                            if (trfInp) { trfInp.value = fmtRp(tarifBaru); trfInp.name = `komp_tarif_${ridBaru}[]`; trfInp.style.background = '#fef9c3'; trfInp.style.color = '#b45309'; setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500); }
+                            const ki = tdTarif.querySelector('input[type="hidden"]');
+                            if (ki) { ki.value = mDataFirst.komp_id; ki.name = `komp_kompId_${ridBaru}[]`; }
                         }
                     }
                 }
-            } else {
-                horizGroups[g].forEach(c => processItem(c));
-            }
+            } else { horizGroups[g].forEach(c => processItem(c)); }
         }
-
-        // ── Proses grup vertikal ──────────────────────────────────────
         const vItems = vertGroup.items || [];
         vItems.forEach(c => processItem(c));
-
-        // Update pajak jika ada nilai baru
-        if (pajakBaru !== null) {
-            const pajakInp = tbody.querySelector('.inp-pajak-pct');
-            if (pajakInp) pajakInp.value = pajakBaru;
-        }
-
+        if (pajakBaru !== null) { const pi = tbody.querySelector('.inp-pajak-pct'); if (pi) pi.value = pajakBaru; }
         calcRow(rowId);
     }
 
-    /**
-     * filterKomponenByJabatan — Menyembunyikan/menampilkan komponen honor
-     * berdasarkan jabatan fungsional yang dipilih.
-     * Komponen yang is_jafung=true dan memiliki jabatan_fungsional berbeda
-     * dari jabatan yang dipilih akan di-hide (qty di-set 0 & visual hidden).
-     * Hanya komponen yang sesuai jabatan yang ditampilkan.
-     */
     function filterKomponenByJabatan(rowId, jabatan) {
         const tbody = document.getElementById(`hr_${rowId}`);
         if (!tbody) return;
-
-        // Kumpulkan semua item komponen yang is_jafung dari horizGroups dan vertGroup
         const allItems = [...Object.values(horizGroups).flat(), ...(vertGroup.items || [])];
-
         allItems.forEach(c => {
-            const rid   = String(c.id_rincian);
-            const mData = masterTarif[rid] || null;
+            const rid = String(c.id_rincian), mData = masterTarif[rid] || null;
             if (!mData) return;
-
             const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
-            if (!isJafung) return; // Non-jafung selalu tampil
-            
-            // Skip items dari single_jafung_col groups (ditangani oleh updateJafungTarif)
+            if (!isJafung) return;
             if (c.single_jafung_col) return;
-
             const kompId = String(mData.komp_id);
-
-            // Cek apakah rincian ini cocok dengan jabatan yang dipilih
             let shouldShow = true;
             if (jabatan && jafungTarif[kompId]) {
-                // Jika komponen ini punya mapping per jabatan, cek kecocokan
-                const jabatanRincian = mData.jabatan_fungsional || '';
-                if (jabatanRincian && jabatanRincian !== jabatan) {
-                    shouldShow = false;
-                }
+                const jabR = mData.jabatan_fungsional || '';
+                if (jabR && jabR !== jabatan) shouldShow = false;
             }
-
-            // Cari semua td yang terkait rid ini (bisa jadi sudah berubah ridnya via updateJafungTarif)
-            // Kita cari berdasarkan rid asli terlebih dahulu
-            let tdQty  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
+            let tdQty = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
             let tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
-            let tdJml  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
-
-            // Untuk vertical items, cari juga row label-nya
-            const vertItems = vertGroup.items || [];
-            const isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
-
+            let tdJml = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
+            const vertItems = vertGroup.items || [], isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
             if (shouldShow) {
-                if (tdQty)   tdQty.style.display = '';
-                if (tdTarif) tdTarif.style.display = '';
-                if (tdJml)   tdJml.style.display = '';
-                // Untuk vertikal, tampilkan juga tr-nya
-                if (isVertItem && tdQty) {
-                    const tr = tdQty.closest('tr');
-                    if (tr) tr.style.display = '';
-                }
+                if (tdQty) tdQty.style.display = ''; if (tdTarif) tdTarif.style.display = ''; if (tdJml) tdJml.style.display = '';
+                if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = ''; }
             } else {
-                if (tdQty) {
-                    tdQty.style.display = 'none';
-                    // Set qty ke 0 agar tidak dihitung
-                    const qtyInp = tdQty.querySelector('input[type="number"]');
-                    if (qtyInp) qtyInp.value = 0;
-                }
-                if (tdTarif) tdTarif.style.display = 'none';
-                if (tdJml)   tdJml.style.display = 'none';
-                // Untuk vertikal, sembunyikan juga tr-nya
-                if (isVertItem && tdQty) {
-                    const tr = tdQty.closest('tr');
-                    if (tr) tr.style.display = 'none';
-                }
+                if (tdQty) { tdQty.style.display = 'none'; const qi = tdQty.querySelector('input[type="number"]'); if (qi) qi.value = 0; }
+                if (tdTarif) tdTarif.style.display = 'none'; if (tdJml) tdJml.style.display = 'none';
+                if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = 'none'; }
             }
         });
-
-        // Recalculate setelah filter
         calcRow(rowId);
     }
 
-    // ================================================================
-    //  createCell — Buat satu <td> dengan innerHTML aman
-    // ================================================================
     function createCell(innerHtml, opts = {}) {
         const td = document.createElement('td');
-        if (opts.rowspan > 1) td.rowSpan = opts.rowspan;
-        if (opts.cls)  td.className = opts.cls;
-        if (opts.style) td.style.cssText = opts.style;
-        if (opts.dataRid)  td.dataset.rid  = opts.dataRid;
-        if (opts.dataRole) td.dataset.role = opts.dataRole;
+        if (opts.rowspan && opts.rowspan > 1) td.rowSpan = opts.rowspan;
+        if (opts.cls)      td.className      = opts.cls;
+        if (opts.style)    td.style.cssText  = opts.style;
+        if (opts.dataRid)  td.dataset.rid    = opts.dataRid;
+        if (opts.dataRole) td.dataset.role   = opts.dataRole;
         td.innerHTML = innerHtml;
         return td;
     }
 
+    function appendKomponenCols(tr, rowId, d) {
+        for (const g in horizGroups) {
+            const firstItem  = horizGroups[g][0] || {};
+            const gHeader    = firstItem.group_header || '';
+            const gSingleCol = firstItem.single_jafung_col || false;
+            if (gSingleCol) {
+                const items = horizGroups[g];
+                let activeRid = items[0].id_rincian, activeData = masterTarif[activeRid] || null, q = 0, t = activeData ? activeData.besaran : 0;
+                if (d) { for (const c of items) { if (d.komponen?.[c.id_rincian] && d.komponen[c.id_rincian].qty > 0) { activeRid = c.id_rincian; activeData = masterTarif[activeRid] || null; q = d.komponen[activeRid].qty; t = d.komponen[activeRid].tarif; break; } } }
+                if (d && d.dosen_jabatan) { const ki = activeData ? String(activeData.komp_id) : ''; if (ki && jafungTarif[ki] && jafungTarif[ki][d.dosen_jabatan]) { const jt = jafungTarif[ki][d.dosen_jabatan]; activeRid = String(jt.id); t = jt.besaran; } }
+                const inpHid = document.createElement('input'); inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
+                const inpGI = document.createElement('input'); inpGI.type = 'hidden'; inpGI.name = 'single_col_group[]'; inpGI.value = g;
+                const inpQty = document.createElement('input'); inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`; inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0'; if (isLocked) inpQty.disabled = true; inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
+                const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: activeRid, dataRole: 'td-qty' }); tdQ.dataset.singleCol = 'true'; tdQ.dataset.groupName = g; tdQ.appendChild(inpHid); tdQ.appendChild(inpGI); tdQ.appendChild(inpQty); tr.appendChild(tdQ);
+                const inpTrf = document.createElement('input'); inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`; inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t); inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+                const inpKid = document.createElement('input'); inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`; inpKid.value = activeData ? activeData.komp_id : 0;
+                const tdT = createCell('', { cls: 'cell-nom align-middle', dataRid: activeRid, dataRole: 'td-tarif' }); tdT.dataset.singleCol = 'true'; tdT.dataset.groupName = g; tdT.appendChild(inpTrf); tdT.appendChild(inpKid); tr.appendChild(tdT);
+                const inpJml = document.createElement('input'); inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+                const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: activeRid, dataRole: 'td-jml' }); tdJ.dataset.singleCol = 'true'; tdJ.dataset.groupName = g; tdJ.appendChild(inpJml); tr.appendChild(tdJ);
+            } else {
+                if (gHeader) {
+                    const uraianVal = d?.uraian_horiz?.[g] || '';
+                    const inpU = document.createElement('input'); inpU.type = 'text'; inpU.name = `uraian_horiz_${encodeURIComponent(g)}[]`; inpU.className = 'inp-gen text-dark'; inpU.value = uraianVal; inpU.placeholder = gHeader; if (isLocked) inpU.disabled = true;
+                    const tdU = createCell('', { cls: 'align-middle', dataRid: `uraian_${g}`, dataRole: 'td-uraian' }); tdU.appendChild(inpU); tr.appendChild(tdU);
+                }
+                horizGroups[g].forEach(c => {
+                    const rid = c.id_rincian, mData = masterTarif[rid] || null;
+                    let q = 0, t = mData ? mData.besaran : 0;
+                    if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
+                    const inpHid = document.createElement('input'); inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
+                    const inpQty = document.createElement('input'); inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`; inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0'; if (isLocked) inpQty.disabled = true; inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
+                    const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' }); tdQ.appendChild(inpHid); tdQ.appendChild(inpQty); tr.appendChild(tdQ);
+                    const inpTrf = document.createElement('input'); inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`; inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t); inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+                    const inpKid = document.createElement('input'); inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`; inpKid.value = mData ? mData.komp_id : 0;
+                    const tdT = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' }); tdT.appendChild(inpTrf); tdT.appendChild(inpKid); tr.appendChild(tdT);
+                    const inpJml = document.createElement('input'); inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+                    const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' }); tdJ.appendChild(inpJml); tr.appendChild(tdJ);
+                });
+            }
+        }
+        const vItems = vertGroup.items || [];
+        if (vItems.length > 0) appendVertRow(tr, vItems[0], d, rowId);
+    }
+
+
+
     // ================================================================
-    //  addHonorMatrixRow — INSERT BARIS BARU KE TABEL
-    //  Menggunakan createElement + appendChild agar tidak di-strip browser
+    //  addHonorMatrixRow — INSERT BARIS DOSEN BARU
+    //  FIX: tdDosen pakai class td-dosen (vertical-align:top) agar
+    //       dropdown selalu sejajar baris pertama, tidak di tengah.
     // ================================================================
     function addHonorMatrixRow(d = null) {
         rCount++;
-        const id = rCount;
-
-        const vItems   = vertGroup.items || [];
-        const rs       = vItems.length > 0 ? vItems.length : 1;
+        const id       = rCount;
         const readOnly = isLocked;
 
-        // Ambil pajak default dari komponen pertama
         let pajak_base = 0;
+        const vItems   = vertGroup.items || [];
         const allItems = [...Object.values(horizGroups).flat(), ...vItems];
         for (const c of allItems) {
             const rid = c.id_rincian;
@@ -664,25 +599,18 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             else if (masterTarif[rid]) { pajak_base = masterTarif[rid].potongan_pajak || 0; break; }
         }
 
-        // ── Buat <tbody> baru ────────────────────────────────────────
         const tbody = document.createElement('tbody');
         tbody.id        = `hr_${id}`;
         tbody.className = 'honor-row bg-white';
 
-        // ── Helper: buat <tr> ────────────────────────────────────────
-        function mkTr() {
-            const tr = document.createElement('tr');
-            tbody.appendChild(tr);
-            return tr;
-        }
-
-        // ── BARIS PERTAMA ────────────────────────────────────────────
-        const tr1 = mkTr();
+        const tr1 = document.createElement('tr');
+        tbody.appendChild(tr1);
 
         // No
-        tr1.appendChild(createCell(id, { cls: 'text-center align-middle fw-bold row-no', rowspan: rs }));
+        const tdNo = createCell(id, { cls: 'text-center align-middle fw-bold row-no' });
+        tr1.appendChild(tdNo);
 
-        // Dropdown Dosen
+        // Dosen — FIX: class td-dosen memberi vertical-align:top agar sejajar baris pertama
         const selDosen = document.createElement('select');
         selDosen.name      = 'dosen_id[]';
         selDosen.className = 'inp-gen text-dark inp-dosen-w';
@@ -690,20 +618,65 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         if (readOnly) selDosen.disabled = true;
         selDosen.onchange  = () => syncProdi(selDosen, id);
         dosenOpts.forEach(o => {
-            const opt    = document.createElement('option');
-            opt.value    = o.val;
-            opt.text     = o.lbl;
+            const opt = document.createElement('option');
+            opt.value = o.val; opt.text = o.lbl;
             opt.dataset.prodi   = o.prodi;
             opt.dataset.jabatan = o.jabatan;
             if (d && String(o.val) === String(d.dosen_id)) opt.selected = true;
             selDosen.appendChild(opt);
         });
-        const tdDosen = createCell('', { cls: 'text-start align-top', rowspan: rs });
-        tdDosen.style.paddingTop = '8px';
+        const tdDosen = createCell('', { cls: 'text-start td-dosen col-dosen' });
         tdDosen.appendChild(selDosen);
         tr1.appendChild(tdDosen);
 
-        // Kolom teks (prodi, mata kuliah, jabatan, dll)
+        // teksCols
+        _appendTeksCols(tr1, id, d, readOnly);
+
+        // Komponen + vertikal
+        appendKomponenCols(tr1, id, d);
+
+        // Total / Pajak
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' }));
+        const inpPajak = document.createElement('input');
+        inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
+        inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
+        inpPajak.value = pajak_base; inpPajak.placeholder = '0';
+        inpPajak.setAttribute('inputmode', 'decimal');
+        if (readOnly) inpPajak.disabled = true;
+        inpPajak.oninput = inpPajak.onchange = function() {
+            this.value = this.value.replace(/[^0-9.]/g, ''); calcRow(id);
+        };
+        const tdPajak = createCell('', { cls: 'align-middle' });
+        tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
+
+        // FIX: Potongan / Honor Diterima / Aksi pakai class td-potongan / td-netto / td-aksi
+        // yang memberi border-left agar kolom tidak tergeser secara visual.
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan td-potongan' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto td-netto' }));
+
+        if (!readOnly) {
+            const btnDel = document.createElement('button');
+            btnDel.type = 'button'; btnDel.title = 'Hapus Dosen Ini';
+            btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
+            btnDel.innerHTML = '<i class="fas fa-trash"></i>';
+            btnDel.onclick   = () => delHonorRow(id);
+            const btnAdd = document.createElement('button');
+            btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Komponen (Dosen Sama)';
+            btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
+            btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
+            btnAdd.onclick   = () => addSubRowSameDosen(id);
+            const tdAksi = createCell('', { cls: 'text-center align-middle td-aksi' });
+            const wrap = document.createElement('div');
+            wrap.className = 'd-flex justify-content-center gap-1';
+            wrap.appendChild(btnDel); wrap.appendChild(btnAdd);
+            tdAksi.appendChild(wrap); tr1.appendChild(tdAksi);
+        }
+
+        document.getElementById('tblHonorDetail').appendChild(tbody);
+        setTimeout(() => calcRow(id), 0);
+    }
+
+    function _appendTeksCols(tr, rowId, d, readOnly) {
         teksCols.forEach(c => {
             let val = '';
             if (d) {
@@ -714,650 +687,215 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                     val = d.dosen_jabatan || (dosenObj ? (dosenObj.jabatan_fungsional || '') : '');
                 }
             }
-
-            const tdT = createCell('', { cls: 'align-middle', rowspan: rs });
-
-            // FIX: Jabatan Fungsional menggunakan dropdown <select> bukan input teks
+            const tdT = createCell('', { cls: 'align-middle' });
             if (c.source === 'jabatan') {
-                const selJabatan = document.createElement('select');
-                selJabatan.name      = `teks_${c.source}[]`;
-                selJabatan.className = 'inp-gen text-dark inp-teks-w inp-jabatan';
-                if (readOnly) selJabatan.disabled = true;
-
-                const jabatanOptions = ['', 'Tenaga Pengajar', 'Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Profesor'];
-                jabatanOptions.forEach(jOpt => {
+                const selJ = document.createElement('select');
+                selJ.name = `teks_${c.source}[]`;
+                selJ.className = 'inp-gen text-dark inp-teks-w inp-jabatan';
+                if (readOnly) selJ.disabled = true;
+                ['', 'Tenaga Pengajar', 'Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Profesor'].forEach(jOpt => {
                     const opt = document.createElement('option');
-                    opt.value = jOpt;
-                    opt.text  = jOpt === '' ? '-- Pilih Jabatan --' : jOpt;
+                    opt.value = jOpt; opt.text = jOpt === '' ? '-- Pilih Jabatan --' : jOpt;
                     if (jOpt === val) opt.selected = true;
-                    selJabatan.appendChild(opt);
+                    selJ.appendChild(opt);
                 });
-
-                // Saat user mengubah jabatan fungsional, update tarif & filter komponen
-                selJabatan.onchange = function() {
-                    updateJafungTarif(id, this.value);
-                    filterKomponenByJabatan(id, this.value);
-                };
-
-                tdT.appendChild(selJabatan);
+                selJ.onchange = function() { updateJafungTarif(rowId, this.value); filterKomponenByJabatan(rowId, this.value); };
+                tdT.appendChild(selJ);
             } else {
                 const inp = document.createElement('input');
-                inp.type  = 'text';
-                inp.name  = `teks_${c.source}[]`;
-                inp.value = val;
-                let extraClass = '';
-                if (c.source === 'prodi') extraClass = ' inp-prodi';
-                inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
+                inp.type = 'text'; inp.name = `teks_${c.source}[]`; inp.value = val;
+                inp.className = 'inp-gen text-dark inp-teks-w' + (c.source === 'prodi' ? ' inp-prodi' : '');
                 if (readOnly || c.source === 'prodi') inp.readOnly = true;
                 if (readOnly) inp.disabled = true;
                 if (c.source !== 'prodi') inp.required = true;
-
-                // Datalist untuk prodi
                 if (c.source === 'prodi') {
                     const dl = document.createElement('datalist');
-                    dl.id = `dlProdi_${id}`;
-                    prodiList.forEach(p => {
-                        const op = document.createElement('option'); op.value = p; dl.appendChild(op);
-                    });
-                    inp.setAttribute('list', `dlProdi_${id}`);
-                    tdT.appendChild(dl);
+                    dl.id = `dlProdi_${rowId}_${Math.random().toString(36).slice(2,7)}`;
+                    prodiList.forEach(p => { const op = document.createElement('option'); op.value = p; dl.appendChild(op); });
+                    inp.setAttribute('list', dl.id); tdT.appendChild(dl);
                 }
-
                 tdT.appendChild(inp);
             }
-
-            tr1.appendChild(tdT);
+            tr.appendChild(tdT);
         });
-
-        // ── Kolom grup Horizontal ────────────────────────────────────
-        for (const g in horizGroups) {
-            const firstItem  = horizGroups[g][0] || {};
-            const gHeader    = firstItem.group_header || '';
-            const gIsJafung  = firstItem.is_jafung || false;
-            const gSingleCol = firstItem.single_jafung_col || false;
-
-            if (gSingleCol) {
-                // ═══ MODE SINGLE COLUMN: 1 set QTY | TARIF | JUMLAH ═══
-                // Tarif otomatis menyesuaikan jabatan fungsional dosen
-                const items = horizGroups[g];
-                // Tentukan rid yang cocok berdasarkan jabatan dosen (atau pakai item pertama sebagai default)
-                let activeRid = items[0].id_rincian;
-                let activeData = masterTarif[activeRid] || null;
-                let q = 0, t = activeData ? activeData.besaran : 0;
-                
-                // Jika ada data existing, cari rid yang punya data
-                if (d) {
-                    for (const c of items) {
-                        if (d.komponen?.[c.id_rincian] && d.komponen[c.id_rincian].qty > 0) {
-                            activeRid = c.id_rincian;
-                            activeData = masterTarif[activeRid] || null;
-                            q = d.komponen[activeRid].qty;
-                            t = d.komponen[activeRid].tarif;
-                            break;
-                        }
-                    }
-                }
-                
-                // Jika dosen sudah dipilih, cari tarif sesuai jabatan
-                if (d && d.dosen_jabatan) {
-                    const kompId = activeData ? String(activeData.komp_id) : '';
-                    if (kompId && jafungTarif[kompId] && jafungTarif[kompId][d.dosen_jabatan]) {
-                        const jt = jafungTarif[kompId][d.dosen_jabatan];
-                        activeRid = String(jt.id);
-                        t = jt.besaran;
-                    }
-                }
-
-                // Hidden input untuk menyimpan semua rids dari grup ini (untuk referensi)
-                const inpHid = document.createElement('input');
-                inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
-                // Data attribute untuk menyimpan info grup single col
-                const inpGrpInfo = document.createElement('input');
-                inpGrpInfo.type = 'hidden'; inpGrpInfo.name = `single_col_group[]`; inpGrpInfo.value = g;
-                
-                // td QTY
-                const inpQty = document.createElement('input');
-                inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`;
-                inpQty.className = 'inp-gen text-center inp-qty';
-                inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
-                if (readOnly) inpQty.disabled = true;
-                inpQty.oninput = inpQty.onchange = () => calcRow(id);
-                const tdQty = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-qty' });
-                tdQty.dataset.singleCol = 'true';
-                tdQty.dataset.groupName = g;
-                tdQty.appendChild(inpHid); tdQty.appendChild(inpGrpInfo); tdQty.appendChild(inpQty);
-                tr1.appendChild(tdQty);
-
-                // td Tarif
-                const inpTrf = document.createElement('input');
-                inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`;
-                inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                const inpKid = document.createElement('input');
-                inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`;
-                inpKid.value = activeData ? activeData.komp_id : 0;
-                const tdTrf = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-tarif' });
-                tdTrf.dataset.singleCol = 'true';
-                tdTrf.dataset.groupName = g;
-                tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid);
-                tr1.appendChild(tdTrf);
-
-                // td Jumlah
-                const inpJml = document.createElement('input');
-                inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
-                inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                const tdJml = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-jml' });
-                tdJml.dataset.singleCol = 'true';
-                tdJml.dataset.groupName = g;
-                tdJml.appendChild(inpJml);
-                tr1.appendChild(tdJml);
-
-            } else {
-                // ═══ MODE NORMAL: Per-item columns ═══
-                // Jika ada group_header → render 1 kolom input teks uraian (rowspan)
-                if (gHeader) {
-                    const uraianVal = d?.uraian_horiz?.[g] || '';
-                    const inpUraian = document.createElement('input');
-                    inpUraian.type      = 'text';
-                    inpUraian.name      = `uraian_horiz_${encodeURIComponent(g)}[]`;
-                    inpUraian.className = 'inp-gen text-dark';
-                    inpUraian.value     = uraianVal;
-                    inpUraian.placeholder = gHeader;
-                    if (readOnly) inpUraian.disabled = true;
-                    const tdUraian = createCell('', { cls: 'align-middle', rowspan: rs, dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
-                    tdUraian.appendChild(inpUraian);
-                    tr1.appendChild(tdUraian);
-                }
-
-                horizGroups[g].forEach(c => {
-                    const rid   = c.id_rincian;
-                    const mData = masterTarif[rid] || null;
-                    let q = 0, t = mData ? mData.besaran : 0;
-                    if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
-
-                    // td QTY
-                    const inpHid = document.createElement('input');
-                    inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
-                    const inpQty = document.createElement('input');
-                    inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
-                    inpQty.className = 'inp-gen text-center inp-qty';
-                    inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
-                    if (readOnly) inpQty.disabled = true;
-                    inpQty.oninput = inpQty.onchange = () => calcRow(id);
-                    const tdQty = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-qty' });
-                    tdQty.appendChild(inpHid); tdQty.appendChild(inpQty);
-                    tr1.appendChild(tdQty);
-
-                    // td Tarif
-                    const inpTrf = document.createElement('input');
-                    inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
-                    inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                    inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                    const inpKid = document.createElement('input');
-                    inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`;
-                    inpKid.value = mData ? mData.komp_id : 0;
-                    const tdTrf = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-tarif' });
-                    tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid);
-                    tr1.appendChild(tdTrf);
-
-                    // td Jumlah
-                    const inpJml = document.createElement('input');
-                    inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
-                    inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                    const tdJml = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-jml' });
-                    tdJml.appendChild(inpJml);
-                    tr1.appendChild(tdJml);
-                });
-            }
-        }
-
-        // ── Kolom grup Vertikal baris-1 ──────────────────────────────
-        if (vItems.length > 0) {
-            appendVertRow(tr1, vItems[0], d, id, rs);
-        }
-
-        // ── Total Bruto, Pajak, Potongan, Netto ──────────────────────
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
-        tr1.appendChild(tdBruto);
-
-        const inpPajak = document.createElement('input');
-        inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
-        inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        inpPajak.value = pajak_base; inpPajak.placeholder = '0';
-        inpPajak.setAttribute('inputmode', 'decimal');
-        if (readOnly) inpPajak.disabled = true;
-        inpPajak.oninput = inpPajak.onchange = function() {
-            this.value = this.value.replace(/[^0-9.]/g, '');
-            calcRow(id);
-        };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
-        tdPajak.appendChild(inpPajak);
-        tr1.appendChild(tdPajak);
-
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:130px; border-left:2px solid #e2e8f0;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:150px; border-left:2px solid #e2e8f0;' }));
-
-        if (!readOnly) {
-            const btnDel = document.createElement('button');
-            btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
-            btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
-            btnDel.innerHTML = '<i class="fas fa-trash"></i>';
-            btnDel.onclick = () => delHonorRow(id);
-
-            const btnAdd = document.createElement('button');
-            btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
-            btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
-            btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
-            btnAdd.onclick = () => addSubRowSameDosen(id);
-
-            const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs });
-            tdAksi.style.cssText = 'min-width:90px; border-left:2px solid #e2e8f0;';
-
-            const wrapDiv = document.createElement('div');
-            wrapDiv.className = 'd-flex justify-content-center gap-1';
-            wrapDiv.appendChild(btnDel);
-            wrapDiv.appendChild(btnAdd);
-            tdAksi.appendChild(wrapDiv);
-            tr1.appendChild(tdAksi);
-        }
-
-        // ── Baris ke-2 s/d N untuk grup vertikal ─────────────────────
-        for (let i = 1; i < vItems.length; i++) {
-            const trN = mkTr();
-            appendVertRow(trN, vItems[i], d, id, 1);
-        }
-
-        // ── Masukkan tbody ke dalam table ─────────────────────────────
-        document.getElementById('tblHonorDetail').appendChild(tbody);
-
-        // Hitung setelah DOM terupdate
-        setTimeout(() => calcRow(id), 0);
     }
 
-    // ── Helper: tambah sel vertikal ke dalam <tr> ────────────────────
-    function appendVertRow(tr, v, d, rowId, rs) {
-        const rid   = v.id_rincian;
-        const mData = masterTarif[rid] || null;
+    function appendVertRow(tr, v, d, rowId) {
+        const rid = v.id_rincian, mData = masterTarif[rid] || null;
         let q = 0, t = mData ? mData.besaran : 0;
         if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
-
         tr.appendChild(createCell(v.label, { cls: 'align-middle bg-light fw-bold text-dark' }));
-
-        const inpHid = document.createElement('input');
-        inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
-        const inpQty = document.createElement('input');
-        inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
-        inpQty.className = 'inp-gen text-center inp-qty bg-white';
-        inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
-        if (isLocked) inpQty.disabled = true;
-        inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
-        const tdQty = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' });
-        tdQty.appendChild(inpHid); tdQty.appendChild(inpQty);
-        tr.appendChild(tdQty);
-
-        const inpTrf = document.createElement('input');
-        inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
-        inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-        inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-        const inpKid = document.createElement('input');
-        inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`;
-        inpKid.value = mData ? mData.komp_id : 0;
-        const tdTrf = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' });
-        tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid);
-        tr.appendChild(tdTrf);
-
-        const inpJml = document.createElement('input');
-        inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
-        inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-        const tdJml = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' });
-        tdJml.appendChild(inpJml);
-        tr.appendChild(tdJml);
+        const inpHid = document.createElement('input'); inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
+        const inpQty = document.createElement('input'); inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`; inpQty.className = 'inp-gen text-center inp-qty bg-white'; inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0'; if (isLocked) inpQty.disabled = true; inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
+        const tdQty = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' }); tdQty.appendChild(inpHid); tdQty.appendChild(inpQty); tr.appendChild(tdQty);
+        const inpTrf = document.createElement('input'); inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`; inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t); inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+        const inpKid = document.createElement('input'); inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`; inpKid.value = mData ? mData.komp_id : 0;
+        const tdTrf = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' }); tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid); tr.appendChild(tdTrf);
+        const inpJml = document.createElement('input'); inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+        const tdJml = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' }); tdJml.appendChild(inpJml); tr.appendChild(tdJml);
     }
 
-    // ================================================================
-    //  delHonorRow & reindexRows
-    // ================================================================
-    function delHonorRow(id) {
-        const el = document.getElementById('hr_' + id);
-        if (el) el.remove();
+
+
+    function delHonorRow(tbodyId) {
+        const tbody = document.getElementById('hr_' + tbodyId);
+        if (tbody) tbody.remove();
         reindexRows();
+        calcSummary();
+    }
+
+    function delSubRow(tr, tbodyId) {
+        const tbody = document.getElementById('hr_' + tbodyId);
+        if (!tbody) return;
+        const rows = tbody.querySelectorAll('tr');
+        if (rows.length <= 1) { delHonorRow(tbodyId); return; }
+        const trFirst = tbody.querySelector('tr');
+        const tdNo    = trFirst.querySelector('.row-no');
+        const tdDosen = trFirst.querySelector('.td-dosen');
+        if (tdNo)    tdNo.rowSpan    = Math.max(1, (tdNo.rowSpan    || 1) - 1);
+        if (tdDosen) tdDosen.rowSpan = Math.max(1, (tdDosen.rowSpan || 1) - 1);
+        tr.remove();
+        calcRow(tbodyId);
         calcSummary();
     }
 
     function reindexRows() {
         let idx = 1;
-        document.querySelectorAll('#tblHonorDetail tbody.honor-row .row-no').forEach(td => {
-            td.innerText = idx++;
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
+            const tdNo = tbody.querySelector('tr:first-child .row-no');
+            if (tdNo) tdNo.innerText = idx++;
         });
     }
 
     // ================================================================
-    //  addSubRowSameDosen — Tambah baris baru di bawah dengan dosen SAMA
-    //  Dosen di-rowspan: baris induk tidak berubah, baris baru = baris
-    //  mandiri (entry terpisah) dengan dosen yang sama. Ini menjaga
-    //  kompatibilitas dengan sistem submit yang sudah ada.
+    //  addSubRowSameDosen — tambah <tr> baru ke tbody yang SAMA
+    //  FIX: sel potongan/netto/aksi juga pakai class td-potongan/td-netto/td-aksi
     // ================================================================
-    function addSubRowSameDosen(parentId) {
-        const parentTbody = document.getElementById(`hr_${parentId}`);
-        if (!parentTbody) return;
+    function addSubRowSameDosen(tbodyId) {
+        const tbody = document.getElementById(`hr_${tbodyId}`);
+        if (!tbody) return;
 
-        // Ambil data dosen dari baris induk
-        const selDosenParent = parentTbody.querySelector('select[name="dosen_id[]"]');
-        const dosenId = selDosenParent ? selDosenParent.value : '';
-        const dosenNama = selDosenParent ? selDosenParent.options[selDosenParent.selectedIndex]?.text : '';
-
+        const selDosenParent = tbody.querySelector('select[name="dosen_id[]"]');
+        const dosenId        = selDosenParent ? selDosenParent.value : '';
         if (!dosenId) {
             Swal.fire('Peringatan', 'Pilih dosen terlebih dahulu sebelum menambah baris.', 'warning');
             return;
         }
 
-        // Ambil nilai jabatan dari baris induk
-        const selJabatanParent = parentTbody.querySelector('select.inp-jabatan');
-        const jabatan = selJabatanParent ? selJabatanParent.value : '';
+        const selJab   = tbody.querySelector('select.inp-jabatan');
+        const jabatan  = selJab ? selJab.value : '';
+        const prodiInp = tbody.querySelector('input.inp-prodi');
+        const prodi    = prodiInp ? prodiInp.value : '';
 
-        // Ambil nilai pajak dari baris induk
-        const pajakParent = parentTbody.querySelector('.inp-pajak-pct');
-        const pajakVal = pajakParent ? pajakParent.value : '0';
+        const trNew = document.createElement('tr');
+        trNew.className = 'honor-subrow';
 
-        // Buat data "d" seperti row kosong tapi dosen sama
-        const dSub = {
-            dosen_id: dosenId,
-            prodi: '',
-            mata_kuliah: '',
-            dosen_jabatan: jabatan,
-            komponen: {}
-        };
+        const dSub = { dosen_id: dosenId, prodi: prodi, mata_kuliah: '', dosen_jabatan: jabatan, komponen: {} };
+        _appendTeksCols(trNew, tbodyId, dSub, isLocked);
+        appendKomponenCols(trNew, tbodyId, null);
 
-        // Ambil prodi dari baris induk
-        const prodiInp = parentTbody.querySelector('input.inp-prodi');
-        if (prodiInp) dSub.prodi = prodiInp.value;
-
-        // Buat row baru menggunakan addHonorMatrixRow dengan data dosen yang sama
-        rCount++;
-        const newId = rCount;
-
-        const vItems   = vertGroup.items || [];
-        const rs       = vItems.length > 0 ? vItems.length : 1;
-
-        // Buat tbody baru
-        const tbody = document.createElement('tbody');
-        tbody.id        = `hr_${newId}`;
-        tbody.className = 'honor-row bg-white border-top border-2 border-info border-opacity-25';
-        // Tandai sebagai sub-row dari parent agar mudah diidentifikasi
-        tbody.dataset.parentId = parentId;
-
-        function mkTr() {
-            const tr = document.createElement('tr');
-            tbody.appendChild(tr);
-            return tr;
-        }
-
-        const tr1 = mkTr();
-
-        // No — tampilkan nomor induk dengan suffix (contoh: 1a)
-        const parentNo = parentTbody.querySelector('.row-no')?.innerText || '';
-        tr1.appendChild(createCell(`${parentNo}+`, { cls: 'text-center align-middle fw-bold row-no text-info', rowspan: rs, style: 'font-size:11px;' }));
-
-        // Dropdown Dosen — sudah dipilih (dosen sama), merge visual dengan baris induk
-        const selDosen = document.createElement('select');
-        selDosen.name      = 'dosen_id[]';
-        selDosen.className = 'inp-gen text-dark inp-dosen-w';
-        selDosen.required  = true;
-        selDosen.style.cssText = 'background: #f0fff4; border-color: #22c55e;';
-        selDosen.onchange  = () => syncProdi(selDosen, newId);
-        dosenOpts.forEach(o => {
-            const opt    = document.createElement('option');
-            opt.value    = o.val;
-            opt.text     = o.lbl;
-            opt.dataset.prodi   = o.prodi;
-            opt.dataset.jabatan = o.jabatan;
-            if (String(o.val) === String(dosenId)) opt.selected = true;
-            selDosen.appendChild(opt);
-        });
-        const tdDosen = createCell('', { cls: 'text-start align-top', rowspan: rs, style: 'background:#f0fff4; border-left:3px solid #22c55e;' });
-        tdDosen.appendChild(selDosen);
-        tr1.appendChild(tdDosen);
-
-        // Kolom teks (kosong, siap diisi — mata kuliah baru)
-        teksCols.forEach(c => {
-            let val = '';
-            if (c.source === 'prodi')   val = dSub.prodi;
-            if (c.source === 'jabatan') val = jabatan;
-
-            const tdT = createCell('', { cls: 'align-middle', rowspan: rs });
-
-            if (c.source === 'jabatan') {
-                const selJabatan = document.createElement('select');
-                selJabatan.name      = `teks_${c.source}[]`;
-                selJabatan.className = 'inp-gen text-dark inp-teks-w inp-jabatan';
-                const jabatanOptions = ['', 'Tenaga Pengajar', 'Asisten Ahli', 'Lektor', 'Lektor Kepala', 'Profesor'];
-                jabatanOptions.forEach(jOpt => {
-                    const opt = document.createElement('option');
-                    opt.value = jOpt; opt.text = jOpt === '' ? '-- Pilih Jabatan --' : jOpt;
-                    if (jOpt === val) opt.selected = true;
-                    selJabatan.appendChild(opt);
-                });
-                selJabatan.onchange = function() {
-                    updateJafungTarif(newId, this.value);
-                    filterKomponenByJabatan(newId, this.value);
-                };
-                tdT.appendChild(selJabatan);
-            } else {
-                const inp = document.createElement('input');
-                inp.type  = 'text';
-                inp.name  = `teks_${c.source}[]`;
-                inp.value = val;
-                let extraClass = '';
-                if (c.source === 'prodi') extraClass = ' inp-prodi';
-                inp.className = 'inp-gen text-dark inp-teks-w' + extraClass;
-                if (c.source === 'prodi') inp.readOnly = true;
-                if (c.source !== 'prodi') inp.required = true;
-                if (c.source === 'prodi') {
-                    const dl = document.createElement('datalist');
-                    dl.id = `dlProdi_${newId}`;
-                    prodiList.forEach(p => { const op = document.createElement('option'); op.value = p; dl.appendChild(op); });
-                    inp.setAttribute('list', `dlProdi_${newId}`);
-                    tdT.appendChild(dl);
-                }
-                tdT.appendChild(inp);
-            }
-            tr1.appendChild(tdT);
-        });
-
-        // Kolom komponen horizontal — semua kosong (qty=0)
-        for (const g in horizGroups) {
-            const firstItem  = horizGroups[g][0] || {};
-            const gHeader    = firstItem.group_header || '';
-            const gSingleCol = firstItem.single_jafung_col || false;
-
-            if (gSingleCol) {
-                const items   = horizGroups[g];
-                let activeRid = items[0].id_rincian;
-                let activeData = masterTarif[activeRid] || null;
-                let t = activeData ? activeData.besaran : 0;
-                if (jabatan) {
-                    const kompId = activeData ? String(activeData.komp_id) : '';
-                    if (kompId && jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
-                        const jt = jafungTarif[kompId][jabatan];
-                        activeRid = String(jt.id); t = jt.besaran;
-                    }
-                }
-                const inpHid = document.createElement('input');
-                inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
-                const inpGrpInfo = document.createElement('input');
-                inpGrpInfo.type = 'hidden'; inpGrpInfo.name = `single_col_group[]`; inpGrpInfo.value = g;
-                const inpQty = document.createElement('input');
-                inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`;
-                inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = 0; inpQty.step = '0.01'; inpQty.min = '0';
-                inpQty.oninput = inpQty.onchange = () => calcRow(newId);
-                const tdQ = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-qty' });
-                tdQ.dataset.singleCol = 'true'; tdQ.dataset.groupName = g;
-                tdQ.appendChild(inpHid); tdQ.appendChild(inpGrpInfo); tdQ.appendChild(inpQty);
-                tr1.appendChild(tdQ);
-                const inpTrf = document.createElement('input');
-                inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`;
-                inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                const inpKid = document.createElement('input');
-                inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`; inpKid.value = activeData ? activeData.komp_id : 0;
-                const tdT2 = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-tarif' });
-                tdT2.dataset.singleCol = 'true'; tdT2.dataset.groupName = g;
-                tdT2.appendChild(inpTrf); tdT2.appendChild(inpKid); tr1.appendChild(tdT2);
-                const inpJml = document.createElement('input');
-                inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                const tdJ = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: activeRid, dataRole: 'td-jml' });
-                tdJ.dataset.singleCol = 'true'; tdJ.dataset.groupName = g; tdJ.appendChild(inpJml); tr1.appendChild(tdJ);
-            } else {
-                if (gHeader) {
-                    const inpUraian = document.createElement('input');
-                    inpUraian.type = 'text'; inpUraian.name = `uraian_horiz_${encodeURIComponent(g)}[]`;
-                    inpUraian.className = 'inp-gen text-dark'; inpUraian.placeholder = gHeader;
-                    const tdU = createCell('', { cls: 'align-middle', rowspan: rs, dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
-                    tdU.appendChild(inpUraian); tr1.appendChild(tdU);
-                }
-                horizGroups[g].forEach(c => {
-                    const rid   = c.id_rincian;
-                    const mData = masterTarif[rid] || null;
-                    const t     = mData ? mData.besaran : 0;
-                    const inpHid = document.createElement('input');
-                    inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
-                    const inpQty = document.createElement('input');
-                    inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
-                    inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = 0; inpQty.step = '0.01'; inpQty.min = '0';
-                    inpQty.oninput = inpQty.onchange = () => calcRow(newId);
-                    const tdQ = createCell('', { cls: 'cell-qty align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-qty' });
-                    tdQ.appendChild(inpHid); tdQ.appendChild(inpQty); tr1.appendChild(tdQ);
-                    const inpTrf = document.createElement('input');
-                    inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
-                    inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                    inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                    const inpKid = document.createElement('input');
-                    inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`; inpKid.value = mData ? mData.komp_id : 0;
-                    const tdT2 = createCell('', { cls: 'cell-nom align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-tarif' });
-                    tdT2.appendChild(inpTrf); tdT2.appendChild(inpKid); tr1.appendChild(tdT2);
-                    const inpJml = document.createElement('input');
-                    inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                    const tdJ = createCell('', { cls: 'cell-tot align-middle', rowspan: rs, dataRid: rid, dataRole: 'td-jml' });
-                    tdJ.appendChild(inpJml); tr1.appendChild(tdJ);
-                });
-            }
-        }
-
-        // Kolom vertikal baris-1
-        if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
-
-        // Total, Pajak, Potongan, Netto
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
-        tr1.appendChild(tdBruto);
+        // Total / Pajak
+        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' }));
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
         inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        inpPajak.value = pajakVal; inpPajak.placeholder = '0';
+        const pajakParent = tbody.querySelector('.inp-pajak-pct');
+        inpPajak.value = pajakParent ? pajakParent.value : '0';
+        inpPajak.placeholder = '0';
         inpPajak.setAttribute('inputmode', 'decimal');
+        if (isLocked) inpPajak.disabled = true;
         inpPajak.oninput = inpPajak.onchange = function() {
-            this.value = this.value.replace(/[^0-9.]/g, '');
-            calcRow(newId);
+            this.value = this.value.replace(/[^0-9.]/g, ''); calcRow(tbodyId);
         };
-        const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
-        tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:130px; border-left:2px solid #e2e8f0;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:150px; border-left:2px solid #e2e8f0;' }));
+        const tdPajak = createCell('', { cls: 'align-middle' });
+        tdPajak.appendChild(inpPajak); trNew.appendChild(tdPajak);
 
-        // Tombol aksi
-        const btnDelSub = document.createElement('button');
-        btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
-        btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
-        btnDelSub.innerHTML = '<i class="fas fa-trash"></i>';
-        btnDelSub.onclick = () => { tbody.remove(); reindexRows(); calcSummary(); };
-        const btnAddSub = document.createElement('button');
-        btnAddSub.type = 'button'; btnAddSub.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
-        btnAddSub.className = 'btn-action bg-light border text-success shadow-sm';
-        btnAddSub.innerHTML = '<i class="fas fa-plus"></i>';
-        btnAddSub.onclick = () => addSubRowSameDosen(newId);
-        const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs, style: 'min-width:90px; border-left:2px solid #e2e8f0;' });
-        const wrapDiv = document.createElement('div');
-        wrapDiv.className = 'd-flex justify-content-center gap-1';
-        wrapDiv.appendChild(btnDelSub); wrapDiv.appendChild(btnAddSub);
-        tdAksi.appendChild(wrapDiv); tr1.appendChild(tdAksi);
+        // FIX: sama seperti baris utama
+        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan td-potongan' }));
+        trNew.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto td-netto' }));
 
-        // Baris vertikal ke-2 dst
-        for (let i = 1; i < vItems.length; i++) {
-            const trN = mkTr();
-            appendVertRow(trN, vItems[i], null, newId, 1);
+        if (!isLocked) {
+            const btnDel = document.createElement('button');
+            btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
+            btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
+            btnDel.innerHTML = '<i class="fas fa-trash"></i>';
+            btnDel.onclick = () => delSubRow(trNew, tbodyId);
+            const btnAdd = document.createElement('button');
+            btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Komponen (Dosen Sama)';
+            btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
+            btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
+            btnAdd.onclick = () => addSubRowSameDosen(tbodyId);
+            const tdAksi = createCell('', { cls: 'text-center align-middle td-aksi' });
+            const wrap = document.createElement('div');
+            wrap.className = 'd-flex justify-content-center gap-1';
+            wrap.appendChild(btnDel); wrap.appendChild(btnAdd);
+            tdAksi.appendChild(wrap); trNew.appendChild(tdAksi);
         }
 
-        // Sisipkan tbody baru SETELAH tbody induk
-        parentTbody.insertAdjacentElement('afterend', tbody);
+        tbody.appendChild(trNew);
 
-        // Sinkronkan jabatan & tarif jika jabatan sudah terisi
+        // Update rowspan No dan Dosen di tr pertama
+        const trFirst = tbody.querySelector('tr:first-child');
+        const tdNo    = trFirst.querySelector('.row-no');
+        const tdDosen = trFirst.querySelector('.td-dosen');
+        const rowCount = tbody.querySelectorAll('tr').length;
+        if (tdNo)    tdNo.rowSpan    = rowCount;
+        if (tdDosen) tdDosen.rowSpan = rowCount;
+
         if (jabatan) {
             setTimeout(() => {
-                updateJafungTarif(newId, jabatan);
-                filterKomponenByJabatan(newId, jabatan);
+                updateJafungTarif(tbodyId, jabatan);
+                filterKomponenByJabatan(tbodyId, jabatan);
             }, 50);
         }
-
-        setTimeout(() => calcRow(newId), 0);
+        setTimeout(() => calcRow(tbodyId), 0);
     }
 
-    // ================================================================
-    //  calcRow — Hitung QTY × Tarif, Pajak, Netto per baris
-    // ================================================================
+
+
     function calcRow(id) {
         const tbody = document.getElementById('hr_' + id);
         if (!tbody) return;
-
-        let total_bruto = 0;
-
-        tbody.querySelectorAll('input[name="rincian_ids[]"]').forEach(ridInp => {
-            const rid    = ridInp.value;
-            const tdQty  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
-            const tdTarf = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
-            const tdJml  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
-            if (!tdQty || !tdTarf || !tdJml) return;
-
-            const qtyInp = tdQty.querySelector('input[type="number"]');
-            const trfInp = tdTarf.querySelector('.inp-tarif');
-            const jmlInp = tdJml.querySelector('.inp-jml-display');
-            if (!qtyInp || !trfInp || !jmlInp) return;
-
-            const qty   = parseFloat(qtyInp.value) || 0;
-            const tarif = cleanNum(trfInp.value);   // "4.000" → 4000
-            const jml   = qty * tarif;
-            total_bruto += jml;
-
-            jmlInp.value = fmtRp(jml);
-            jmlInp.style.color = jml > 0 ? '#0d6efd' : '#94a3b8';
+        let total_bruto_tbody = 0, total_potongan_tbody = 0;
+        tbody.querySelectorAll('tr').forEach(tr => {
+            let bruto_tr = 0;
+            tr.querySelectorAll('input[name="rincian_ids[]"]').forEach(ridInp => {
+                const rid    = ridInp.value;
+                const tdQty  = tr.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
+                const tdTarf = tr.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
+                const tdJml  = tr.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
+                if (!tdQty || !tdTarf || !tdJml) return;
+                const qtyInp = tdQty.querySelector('input[type="number"]');
+                const trfInp = tdTarf.querySelector('.inp-tarif');
+                const jmlInp = tdJml.querySelector('.inp-jml-display');
+                if (!qtyInp || !trfInp || !jmlInp) return;
+                const qty = parseFloat(qtyInp.value) || 0, tarif = cleanNum(trfInp.value), jml = qty * tarif;
+                bruto_tr += jml;
+                jmlInp.value = fmtRp(jml);
+                jmlInp.style.color = jml > 0 ? '#0d6efd' : '#94a3b8';
+            });
+            const pajakInp = tr.querySelector('.inp-pajak-pct');
+            const pct      = pajakInp ? cleanPct(pajakInp.value) : 0;
+            const potongan = Math.round(bruto_tr * pct / 100);
+            const netto    = bruto_tr - potongan;
+            const txtBruto = tr.querySelector('.txt-total');
+            const txtPot   = tr.querySelector('.txt-potongan');
+            const txtNet   = tr.querySelector('.txt-netto');
+            if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(bruto_tr);
+            if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
+            if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
+            total_bruto_tbody    += bruto_tr;
+            total_potongan_tbody += potongan;
         });
-
-        // Hitung pajak & netto
-        const pajakInp = tbody.querySelector('.inp-pajak-pct');
-        const pct      = pajakInp ? cleanPct(pajakInp.value) : 0;
-        const potongan = Math.round(total_bruto * pct / 100);
-        const netto    = total_bruto - potongan;
-
-        const txtBruto = tbody.querySelector('.txt-total');
-        const txtPot   = tbody.querySelector('.txt-potongan');
-        const txtNet   = tbody.querySelector('.txt-netto');
-
-        if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(total_bruto);
-        if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
-        if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
-
         calcSummary();
     }
 
-    // ================================================================
-    //  calcSummary — Update ringkasan bawah halaman
-    // ================================================================
     function calcSummary() {
         let sumB = 0, sumP = 0, count = 0;
-        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(r => {
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
             count++;
-            const b = r.querySelector('.txt-total');
-            const p = r.querySelector('.txt-potongan');
-            if (b) sumB += cleanNum(b.innerText);
-            if (p) sumP += cleanNum(p.innerText);
+            tbody.querySelectorAll('.txt-total').forEach(b    => { sumB += cleanNum(b.innerText); });
+            tbody.querySelectorAll('.txt-potongan').forEach(p  => { sumP += cleanNum(p.innerText); });
         });
         document.getElementById('sumDosen').innerText = count + ' Dosen';
         document.getElementById('sumBruto').innerText = 'Rp ' + fmtRp(sumB);
@@ -1365,67 +903,35 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         document.getElementById('sumNetto').innerText = 'Rp ' + fmtRp(sumB - sumP);
     }
 
-    // ================================================================
-    //  submitHonorDetail & executeSubmit
-    // ================================================================
     function submitHonorDetail(isFinal) {
         if (document.querySelectorAll('#tblHonorDetail tbody.honor-row').length === 0) {
             Swal.fire('Ditolak', 'Minimal harus ada 1 entri dosen!', 'error'); return;
         }
         document.getElementById('inpFinalize').value = isFinal;
         if (isFinal) {
-            Swal.fire({
-                title: 'Finalisasi Honor?',
-                text: 'Data yang difinalisasi tidak bisa diedit kembali. Lanjutkan?',
-                icon: 'warning', showCancelButton: true,
-                confirmButtonColor: '#0d6efd', confirmButtonText: 'Ya, Finalisasi!'
-            }).then(r => { if (r.isConfirmed) executeSubmit(); });
-        } else {
-            executeSubmit();
-        }
+            Swal.fire({ title: 'Finalisasi Honor?', text: 'Data yang difinalisasi tidak bisa diedit kembali. Lanjutkan?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#0d6efd', confirmButtonText: 'Ya, Finalisasi!' }).then(r => { if (r.isConfirmed) executeSubmit(); });
+        } else { executeSubmit(); }
     }
 
     function executeSubmit() {
-        // ── Snapshot state aktif ke hidden inputs sebelum submit ──────
-        // Masalah: saat single_jafung_col, rid di DOM bisa berganti-ganti
-        // sehingga komp_qty_{rid}[] tidak konsisten. Solusi: buat snapshot
-        // flat (satu per dosen per grup) yang pasti konsisten.
         const form = document.getElementById('formDetailGen');
-
-        // Hapus snapshot lama jika ada
         form.querySelectorAll('input.snap-submit').forEach(el => el.remove());
-
-        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach((tbody, rowIdx) => {
-            // Kumpulkan semua td[data-role="td-qty"] dalam baris ini
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach((tbody) => {
             tbody.querySelectorAll('td[data-role="td-qty"]').forEach(tdQty => {
-                const rid    = tdQty.dataset.rid;
-                const qtyInp = tdQty.querySelector('input[type="number"]');
+                const rid = tdQty.dataset.rid, qtyInp = tdQty.querySelector('input[type="number"]');
                 if (!rid || !qtyInp) return;
                 const qty = parseFloat(qtyInp.value) || 0;
-                if (qty <= 0) return; // skip kosong
-
-                // Ambil tarif dari td-tarif
+                if (qty <= 0) return;
                 const tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
                 const trfInp  = tdTarif ? tdTarif.querySelector('.inp-tarif') : null;
-                const tarif   = trfInp ? cleanNum(trfInp.value) : 0;
-
-                // Ambil kompId
-                const kidInp = tdTarif ? tdTarif.querySelector(`input[name^="komp_kompId_"]`) : null;
-                const kompId = kidInp ? kidInp.value : 0;
-
-                // Pastikan hidden rincian_ids[] dan komp_qty/tarif/kompId input
-                // di dalam form sudah benar. Jika belum ada atau rid-nya beda,
-                // tambahkan sebagai snapshot baru.
-                const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
-                if (hidRid) hidRid.value = rid; // update ke rid aktif
-
-                // Pastikan komp_qty dan komp_tarif input namanya sesuai rid aktif
+                const kidInp  = tdTarif ? tdTarif.querySelector(`input[name^="komp_kompId_"]`) : null;
+                const hidRid  = tdQty.querySelector('input[name="rincian_ids[]"]');
+                if (hidRid) hidRid.value = rid;
                 if (qtyInp) qtyInp.name = `komp_qty_${rid}[]`;
                 if (trfInp) trfInp.name = `komp_tarif_${rid}[]`;
                 if (kidInp) kidInp.name = `komp_kompId_${rid}[]`;
             });
         });
-
         const fd  = new FormData(form);
         const btn = document.querySelector('[onclick="submitHonorDetail(0)"]');
         if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...'; btn.disabled = true; }
@@ -1433,12 +939,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             .then(r => r.json())
             .then(res => {
                 if (res.status === 'success') {
-                    Swal.fire({ icon: 'success', title: 'Berhasil', text: res.message, timer: 1500, showConfirmButton: false })
-                        .then(() => {
-                            if (document.getElementById('inpFinalize').value == 1)
-                                window.location.href = '?page=honorarium&tab=laporan';
-                            else window.location.reload();
-                        });
+                    Swal.fire({ icon: 'success', title: 'Berhasil', text: res.message, timer: 1500, showConfirmButton: false }).then(() => {
+                        if (document.getElementById('inpFinalize').value == 1) window.location.href = '?page=honorarium&tab=laporan';
+                        else window.location.reload();
+                    });
                 } else {
                     Swal.fire('Gagal', res.message, 'error');
                     if (btn) { btn.innerHTML = '<i class="fas fa-save me-2"></i>Simpan Draft'; btn.disabled = false; }
@@ -1446,7 +950,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             });
     }
 
-    // ── Inisialisasi ─────────────────────────────────────────────────
     function initHonorRows() {
         if (matrixDetails.length > 0) {
             matrixDetails.forEach(d => {
