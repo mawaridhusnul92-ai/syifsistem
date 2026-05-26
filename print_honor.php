@@ -14,7 +14,7 @@ $gen_id = (int)($_GET['gen_id'] ?? 0);
 
 if ($gen_id <= 0) die("<h3 style='padding: 50px;'>Parameter tidak valid.</h3>");
 
-$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun, 
+$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun,
         ds.nama as dosen_nama, ds.jabatan_fungsional as jabatan, ds.program_studi as default_prodi,
         t.custom_layout, t.nama_template
         FROM honor_generate_detail d
@@ -63,6 +63,16 @@ while($r = $res->fetch_assoc()) {
     $t_bruto += (double)$r['total_honor']; $t_pajak += (double)$r['potongan_pajak'];
 }
 $t_netto = $t_bruto - $t_pajak;
+
+// AMBIL nama_honor dan periode_semester langsung dari DB (aman jika kolom belum ada)
+$nama_honor_doc      = '';
+$periode_semester_doc = '';
+$res_gen_info = @$conn->query("SELECT nama_honor, periode_semester FROM honor_generate WHERE id=$gen_id LIMIT 1");
+if ($res_gen_info) {
+    $rgi = $res_gen_info->fetch_assoc();
+    $nama_honor_doc      = $rgi['nama_honor'] ?? '';
+    $periode_semester_doc = $rgi['periode_semester'] ?? '';
+}
 
 $master_tarif = [];
 $res_tarif = $conn->query("SELECT id, besaran, rincian, satuan FROM honor_komponen_detail");
@@ -188,14 +198,17 @@ if (empty($signatures)) {
             <div class="kop-logo"><?= $logo_img ?></div>
             <div class="kop-text">
                 <div class="kop-nama"><?= $inst_name ?></div>
-                <div class="kop-alamat">LAPORAN PENGAJUAN: <?= htmlspecialchars($nama_template_doc) ?></div>
+                <?php if (!empty($nama_honor_doc)): ?>
+                <div style="font-size:13pt; font-weight:900; margin-top:4px; text-transform:uppercase;"><?= htmlspecialchars($nama_honor_doc) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($periode_semester_doc)): ?>
+                <div style="font-size:11pt; font-weight:700; margin-top:2px;">Semester: <?= htmlspecialchars($periode_semester_doc) ?></div>
+                <?php endif; ?>
+                <div class="kop-alamat" style="font-size:10pt; margin-top:3px;"><?= htmlspecialchars($inst_addr) ?></div>
             </div>
         </div>
-
-        <div class="doc-sub fw-bold">Periode Laporan: <?= strtoupper($dosen['periode'] ?? '') ?></div>
         
         <?php foreach($matrix as $nama_gen => $items): ?>
-            <div class="group-title"><?= htmlspecialchars($nama_gen) ?></div>
             <table class="tbl-data">
                 <thead>
                     <tr><?= $th_row1 ?></tr>
