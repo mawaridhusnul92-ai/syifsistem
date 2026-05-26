@@ -287,7 +287,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     }
 
     $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
+    $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
 ?>
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
@@ -936,7 +936,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tr1.appendChild(createCell('', { cls: 'txt-potongan align-middle', rowspan: rs, style: 'min-width:120px; text-align:right !important; padding: 4px 8px;' }));
         tr1.appendChild(createCell('', { cls: 'txt-netto align-middle', rowspan: rs, style: 'min-width:140px; text-align:right !important; padding: 4px 8px; background:#f0fff4;' }));
 
-        if (!readOnly) {
+        // Tombol aksi selalu tampil
+        {
             const btnDel = document.createElement('button');
             btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
             btnDel.className = 'btn-action bg-light border text-danger shadow-sm';
@@ -944,16 +945,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             btnDel.onclick = () => delHonorRow(id);
 
             const btnAdd = document.createElement('button');
-            btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris Mata Kuliah (Dosen Sama)';
+            btnAdd.type = 'button'; btnAdd.title = 'Tambah Baris (Dosen Sama)';
             btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
-            btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
+            btnAdd.innerHTML = '<i class="fas fa-plus fw-bold"></i>';
             btnAdd.onclick = () => addSubRowSameDosen(id);
 
             const tdAksi = createCell('', { cls: 'text-center align-middle', rowspan: rs });
             tdAksi.style.cssText = 'min-width:70px;';
 
             const wrapDiv = document.createElement('div');
-            wrapDiv.className = 'd-flex justify-content-center gap-1';
+            wrapDiv.className = 'd-flex flex-column justify-content-center align-items-center gap-1';
             wrapDiv.appendChild(btnDel);
             wrapDiv.appendChild(btnAdd);
             tdAksi.appendChild(wrapDiv);
@@ -1243,7 +1244,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tr1.appendChild(createCell('', { cls: 'txt-potongan align-middle', rowspan: rs, style: 'min-width:120px; text-align:right !important; padding: 4px 8px;' }));
         tr1.appendChild(createCell('', { cls: 'txt-netto align-middle', rowspan: rs, style: 'min-width:140px; text-align:right !important; padding: 4px 8px; background:#f0fff4;' }));
 
-        // Tombol Aksi: X (hapus) saja — tombol + tidak perlu karena sudah ada di parent
+        // Tombol aksi sub-baris: X hapus saja (+ ada di parent)
         const btnDelSub = document.createElement('button');
         btnDelSub.type = 'button'; btnDelSub.title = 'Hapus Baris Ini';
         btnDelSub.className = 'btn-action bg-light border text-danger shadow-sm';
