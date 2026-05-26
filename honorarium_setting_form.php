@@ -144,7 +144,6 @@ function renderPreviewTable($layout_json) {
     echo '<td class="text-center text-muted" style="background:#f8f9fa;">0</td>';
     echo '<td class="text-center fw-bold" style="background:#d1fae5;color:#065f46;">0</td>';
     echo '</tr></tbody></table></div>';
-    <?php
     return ob_get_clean();
 }
 
