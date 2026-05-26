@@ -22,27 +22,24 @@ if (!in_array('linked_pengajuan_template_id', $_cols_tpl)) {
     $conn->query("ALTER TABLE honor_template ADD COLUMN linked_pengajuan_template_id INT NULL DEFAULT NULL AFTER custom_layout");
 }
 
-// ── MIGRASI: template lama (sebelum fitur sub-menu) → set ke PENGAJUAN ──
-// Jika kolom jenis_tujuan baru saja ditambah ATAU ada template tanpa jenis_tujuan yang jelas,
-// pastikan semua template yang tidak punya linked_pengajuan_template_id di-set ke PENGAJUAN.
-// Ini agar template lama yang sudah dibuat tetap terlihat di sub-menu Pengajuan.
-if ($_jenis_tujuan_baru) {
-    // Kolom baru → semua template existing di-set PENGAJUAN
-    $conn->query("UPDATE honor_template SET jenis_tujuan='PENGAJUAN' WHERE jenis_tujuan IS NULL OR jenis_tujuan=''");
-} else {
-    // Kolom sudah ada tapi mungkin ada template lama yang terdaftar sebagai KUITANSI
-    // padahal tidak punya linked_pengajuan_template_id (artinya template lama biasa)
-    $conn->query("UPDATE honor_template SET jenis_tujuan='PENGAJUAN'
-                  WHERE (linked_pengajuan_template_id IS NULL OR linked_pengajuan_template_id = 0)
-                    AND jenis_tujuan = 'KUITANSI'");
+// ── MIGRASI AGRESIF: pastikan semua template lama ter-update ke PENGAJUAN ──
+// Jalankan UPDATE tanpa syarat: setiap template yang tidak punya
+// linked_pengajuan_template_id harus PENGAJUAN, bukan KUITANSI.
+$conn->query("UPDATE honor_template 
+              SET jenis_tujuan='PENGAJUAN' 
+              WHERE linked_pengajuan_template_id IS NULL 
+                 OR linked_pengajuan_template_id = 0
+                 OR linked_pengajuan_template_id = ''");
+
+// ── Ambil semua template dipisah per jenis (dengan null-check penuh) ──
+$tpl_pengajuan = [];
+$_qry_peng = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC");
+if ($_qry_peng && $_qry_peng->num_rows >= 0) {
+    $tpl_pengajuan = $_qry_peng->fetch_all(MYSQLI_ASSOC);
 }
 
-// ── Ambil semua template dipisah per jenis ──────────────────────────
-$tpl_pengajuan = $conn->query(
-    "SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY id ASC"
-)->fetch_all(MYSQLI_ASSOC);
-
-// Query kuitansi — gunakan CASE agar tidak crash jika kolom linked baru saja ditambah
+// Query kuitansi — null-check lengkap
+$tpl_kuitansi = [];
 $_res_ktpl = $conn->query(
     "SELECT t.*, p.nama_template AS nama_pengajuan_acuan
      FROM honor_template t
@@ -50,7 +47,9 @@ $_res_ktpl = $conn->query(
      WHERE t.jenis_tujuan='KUITANSI'
      ORDER BY t.id ASC"
 );
-$tpl_kuitansi = $_res_ktpl ? $_res_ktpl->fetch_all(MYSQLI_ASSOC) : [];
+if ($_res_ktpl) {
+    $tpl_kuitansi = $_res_ktpl->fetch_all(MYSQLI_ASSOC);
+}
 
 // ── Daftar komponen aktif untuk builder ────────────────────────────
 $master_komponen = [];
