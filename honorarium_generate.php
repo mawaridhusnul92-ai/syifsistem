@@ -82,7 +82,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     
     .th-group { background: #ffc107 !important; color: #000 !important; border-bottom: 2px solid #000 !important; }
     .cell-qty { min-width: 70px; text-align: center; } .cell-nom { min-width: 120px; text-align: right; } .cell-tot { min-width: 120px; text-align: right; font-weight: 800; background: #f8fafc; color: #0d6efd; white-space: nowrap; }
-    .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; min-width: 120px; display: block; text-align: right; padding-right: 8px; }
+    .txt-total { white-space: nowrap; min-width: 130px; text-align: right !important; padding: 4px 8px; font-weight: 700; } .txt-potongan { white-space: nowrap; min-width: 120px; text-align: right !important; padding: 4px 8px; font-weight: 700; color: #dc3545 !important; } .txt-netto { white-space: nowrap; min-width: 140px; text-align: right !important; padding: 4px 8px; font-weight: 700; font-size: 1.05em; color: #198754 !important; }
     .btn-action { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px;}
     /* Highlight sel jumlah saat ada nilai */
     .inp-jml-display { text-align: right; font-weight: 700; color: #0d6efd; background: transparent; border: none; width: 100%; padding: 0; }
@@ -916,7 +916,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         }
 
         // ── Total Bruto, Pajak, Potongan, Netto ──────────────────────
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
+        const tdBruto = createCell('', { cls: 'txt-total align-middle', rowspan: rs, style: 'min-width:130px; text-align:right !important; padding: 4px 8px;' });
         tr1.appendChild(tdBruto);
 
         const inpPajak = document.createElement('input');
@@ -933,8 +933,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         tdPajak.appendChild(inpPajak);
         tr1.appendChild(tdPajak);
 
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px; background:#f0fff4;' }));
+        tr1.appendChild(createCell('', { cls: 'txt-potongan align-middle', rowspan: rs, style: 'min-width:120px; text-align:right !important; padding: 4px 8px;' }));
+        tr1.appendChild(createCell('', { cls: 'txt-netto align-middle', rowspan: rs, style: 'min-width:140px; text-align:right !important; padding: 4px 8px; background:#f0fff4;' }));
 
         if (!readOnly) {
             const btnDel = document.createElement('button');
@@ -1227,7 +1227,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         if (vItems.length > 0) appendVertRow(tr1, vItems[0], null, newId, rs);
 
         // Total Bruto, Pajak, Potongan, Netto
-        const tdBruto = createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', rowspan: rs, style: 'white-space:nowrap; min-width:130px;' });
+        const tdBruto = createCell('', { cls: 'txt-total align-middle', rowspan: rs, style: 'min-width:130px; text-align:right !important; padding: 4px 8px;' });
         tr1.appendChild(tdBruto);
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
@@ -1240,8 +1240,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         };
         const tdPajak = createCell('', { cls: 'align-middle', rowspan: rs });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', rowspan: rs, style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle fs-6 text-success txt-netto', rowspan: rs, style: 'white-space:nowrap; min-width:140px; background:#f0fff4;' }));
+        tr1.appendChild(createCell('', { cls: 'txt-potongan align-middle', rowspan: rs, style: 'min-width:120px; text-align:right !important; padding: 4px 8px;' }));
+        tr1.appendChild(createCell('', { cls: 'txt-netto align-middle', rowspan: rs, style: 'min-width:140px; text-align:right !important; padding: 4px 8px; background:#f0fff4;' }));
 
         // Tombol Aksi: X (hapus) saja — tombol + tidak perlu karena sudah ada di parent
         const btnDelSub = document.createElement('button');
@@ -1321,9 +1321,9 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const txtPot   = tbody.querySelector('.txt-potongan');
         const txtNet   = tbody.querySelector('.txt-netto');
 
-        if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(total_bruto);
-        if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
-        if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
+        if (txtBruto) { txtBruto.textContent = 'Rp ' + fmtRp(total_bruto); txtBruto.style.textAlign = 'right'; }
+        if (txtPot)   { txtPot.textContent   = 'Rp ' + fmtRp(potongan);    txtPot.style.textAlign   = 'right'; }
+        if (txtNet)   { txtNet.textContent   = 'Rp ' + fmtRp(netto);       txtNet.style.textAlign   = 'right'; }
 
         calcSummary();
     }
