@@ -119,8 +119,26 @@ while ($r = $res->fetch_assoc()) {
 }
 
 $master_tarif = [];
-$res_t = $conn->query("SELECT id, besaran, rincian, satuan FROM honor_komponen_detail");
+$res_t = $conn->query("SELECT id, besaran, rincian, satuan, jabatan_fungsional FROM honor_komponen_detail");
 if ($res_t) { while($rt = $res_t->fetch_assoc()) $master_tarif[$rt['id']] = $rt; }
+
+// Helper: ubah "Per Mahasiswa" → "Mhs", "Per SKS" → "SKS", dst
+function satuanLabel($satuan) {
+    $map = [
+        'Per Mahasiswa' => 'Mhs',
+        'Per SKS'       => 'SKS',
+        'Per Pertemuan' => 'Pertemuan',
+        'Per Kegiatan'  => 'Kegiatan',
+        'Per Jam'       => 'Jam',
+        'Per Soal'      => 'Soal',
+        'Lump Sum'      => 'Ls',
+    ];
+    return $map[$satuan] ?? ($satuan ?: 'Qty');
+}
+function satuanTarifLabel($satuan) {
+    $s = satuanLabel($satuan);
+    return "Rp/$s";
+}
 
 // ==========================================
 // KOP SURAT (DARI PROFILE)
@@ -188,33 +206,69 @@ function buildTableHeader($teks_cols, $horiz_groups, $vert_info, $master_tarif =
     }
     
     foreach ($horiz_groups as $gName => $items) {
-        $cs = count($items) * 3;
-        $need_row2 = true;
-        $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
-        foreach ($items as $it) {
-            $lbl  = strtoupper($it['label']);
-            $rid  = (int)($it['id_rincian'] ?? 0);
-            $sat  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : 'Satuan';
-            $row2 .= "<th class='th-sub'>$lbl<br><span style='font-weight:normal;font-size:8px;'>($sat)</span></th>";
-            $row2 .= "<th class='th-sub'>Rp / $sat</th>";
-            $row2 .= "<th class='th-sub'>JUMLAH</th>";
+        $firstItem  = $items[0] ?? null;
+        $gSingleCol = !empty($firstItem['single_jafung_col']);
+        $gIsJafung  = !empty($firstItem['is_jafung']);
+        $need_row2  = true;
+        
+        if ($gSingleCol) {
+            // Mode 1 kolom: ambil satuan dari rincian pertama
+            $first_rid = (int)($firstItem['id_rincian'] ?? 0);
+            $satuan    = $master_tarif[$first_rid]['satuan'] ?? '';
+            $qtyLbl    = strtoupper(satuanLabel($satuan));
+            $tarifLbl  = satuanTarifLabel($satuan);
+            
+            $row1 .= "<th colspan='3' class='th-grup'>".strtoupper($gName)."</th>";
+            $row2 .= "<th class='th-sub'>$qtyLbl</th><th class='th-sub'>$tarifLbl</th><th class='th-sub'>JUMLAH</th>";
+            
+        } elseif ($gIsJafung) {
+            // Mode jafung non-single: tampilkan per jabatan dengan satuan
+            $cs = count($items) * 3;
+            $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
+            foreach ($items as $it) {
+                $rid      = (int)($it['id_rincian'] ?? 0);
+                $satuan   = $master_tarif[$rid]['satuan'] ?? '';
+                $qtyLbl   = strtoupper(satuanLabel($satuan));
+                $tarifLbl = satuanTarifLabel($satuan);
+                $lbl      = strtoupper($it['label']);
+                $row2 .= "<th class='th-sub'>$lbl ($qtyLbl)</th><th class='th-sub'>$tarifLbl</th><th class='th-sub'>JUMLAH</th>";
+            }
+            
+        } else {
+            // Mode normal: tampilkan semua item dengan satuan dari masing-masing rincian
+            $cs = count($items) * 3;
+            // Cek jika ada group_header (kolom uraian)
+            $gHeader = trim($firstItem['group_header'] ?? '');
+            if (!empty($gHeader)) {
+                $cs += 1;
+                $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
+                $row2 .= "<th class='th-sub'>".strtoupper($gHeader)."</th>";
+            } else {
+                $row1 .= "<th colspan='$cs' class='th-grup'>".strtoupper($gName)."</th>";
+            }
+            foreach ($items as $it) {
+                $rid      = (int)($it['id_rincian'] ?? 0);
+                $satuan   = $master_tarif[$rid]['satuan'] ?? '';
+                $qtyLbl   = strtoupper(satuanLabel($satuan));
+                $tarifLbl = satuanTarifLabel($satuan);
+                $lbl      = strtoupper($it['label']);
+                $row2 .= "<th class='th-sub'>$lbl<br><small>($qtyLbl)</small></th><th class='th-sub'>$tarifLbl</th><th class='th-sub'>JUMLAH</th>";
+            }
         }
     }
     
     if (!empty($vert_info['items'])) {
         $need_row2 = true;
-        // Tangani Group Header Kosong
+        // Ambil satuan dari rincian pertama vertikal
+        $first_vrid = (int)($vert_info['items'][0]['id_rincian'] ?? 0);
+        $v_satuan   = $master_tarif[$first_vrid]['satuan'] ?? '';
+        $vQtyLbl    = strtoupper(satuanLabel($v_satuan));
+        $vTarifLbl  = satuanTarifLabel($v_satuan);
+        
         $vHeader = isset($vert_info['header']) ? trim(strtoupper($vert_info['header'])) : '';
-        if ($vHeader !== '') {
-            $row1 .= "<th rowspan='2'>{$vHeader}</th>";
-        } else {
-            $row1 .= "<th rowspan='2'></th>";
-        }
+        $row1 .= "<th rowspan='2'>" . ($vHeader ?: 'URAIAN') . "</th>";
         $row1 .= "<th colspan='3' class='th-grup'>".strtoupper($vert_info['name'])."</th>";
-        // Ambil satuan dari item pertama grup vertikal
-        $first_v_rid = (int)($vert_info['items'][0]['id_rincian'] ?? 0);
-        $first_v_sat = !empty($master_tarif[$first_v_rid]['satuan']) ? $master_tarif[$first_v_rid]['satuan'] : 'Satuan';
-        $row2 .= "<th class='th-sub'>Jml ($first_v_sat)</th><th class='th-sub'>Rp/$first_v_sat</th><th class='th-sub'>Total Honor</th>";
+        $row2 .= "<th class='th-sub'>$vQtyLbl</th><th class='th-sub'>$vTarifLbl</th><th class='th-sub'>JUMLAH</th>";
     }
     
     $row1 .= "<th rowspan='2' style='min-width:90px'>TOTAL<br>BRUTO</th>";
@@ -352,7 +406,11 @@ foreach ($slips as $did => $dosen_data):
         // Hitung Colspan untuk Footer (Subtotal) — TANPA kolom No
         $col_count = 0;
         $col_count += count($teks_cols);
-        foreach ($horiz_groups as $gName => $items) $col_count += (count($items) * 3);
+        foreach ($horiz_groups as $gName => $items) {
+            $firstItem = $items[0] ?? null;
+            $gSingleCol = !empty($firstItem['single_jafung_col']);
+            $col_count += $gSingleCol ? 3 : (count($items) * 3);
+        }
         if (!empty($vert_info['items'])) $col_count += 4; // label + qty + tarif + jml
         
         [$thead1, $thead2] = buildTableHeader($teks_cols, $horiz_groups, $vert_info, $master_tarif);
@@ -377,9 +435,17 @@ foreach ($slips as $did => $dosen_data):
                 // Looping Per Baris Item (Berdasarkan Mata Kuliah/Prodi)
                 foreach ($gen['rows'] as $r_idx => $row_data) {
                     
-                    // Untuk layout vertikal: ambil SEMUA item dari layout (ikuti urutan layout, bukan hanya yang qty>0)
-                    // Ini sesuai requirement: susunan mengikuti layout form setting, semua komponen ditampilkan
-                    $active_vItems = $vItems; // tampilkan semua, bukan hanya yang qty>0
+                    // Untuk layout vertikal: hitung hanya item yang benar-benar punya data (qty > 0)
+                    $active_vItems = [];
+                    if ($has_vert) {
+                        foreach ($vItems as $v) {
+                            $vrid = (int)$v['id_rincian'];
+                            $vk   = $row_data['komponen'][$vrid] ?? null;
+                            if ($vk && (float)$vk['qty'] > 0) {
+                                $active_vItems[] = $v;
+                            }
+                        }
+                    }
                     $rs = $has_vert ? max(count($active_vItems), 1) : 1;
                     
                     for ($vi = 0; $vi < $rs; $vi++) {
@@ -397,41 +463,58 @@ foreach ($slips as $did => $dosen_data):
                                 echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-teks fw-bold'>$val</td>";
                             }
                             
-                            // Kolom Horizontal — tampilkan SEMUA komponen dari layout, qty=0 tampil sebagai '-'
+                            // Kolom Horizontal
                             foreach ($horiz_groups as $gName => $items) {
-                                foreach ($items as $it) {
-                                    $rid   = (int)$it['id_rincian'];
-                                    $k     = $row_data['komponen'][$rid] ?? null;
-                                    $tarif = $k ? $k['tarif'] : ((float)($master_tarif[$rid]['besaran'] ?? 0));
-                                    $qty   = $k ? $k['qty'] : 0;
-                                    $jml   = $qty * $tarif;
-                                    $sat   = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
+                                $firstItem = $items[0] ?? null;
+                                $gSingleCol = !empty($firstItem['single_jafung_col']);
+                                
+                                if ($gSingleCol) {
+                                    // Mode 1 Kolom: cari data komponen yang ada (qty > 0)
+                                    $found_qty = 0; $found_tarif = 0; $found_jml = 0;
+                                    foreach ($items as $it) {
+                                        $rid = (int)$it['id_rincian'];
+                                        $k   = $row_data['komponen'][$rid] ?? null;
+                                        if ($k && (float)$k['qty'] > 0) {
+                                            $found_qty   = (float)$k['qty'];
+                                            $found_tarif = (float)$k['tarif'];
+                                            $found_jml   = $found_qty * $found_tarif;
+                                            break;
+                                        }
+                                    }
+                                    $rs_td = $has_vert ? ($rs + 1) : $rs;
+                                    echo "<td rowspan='$rs_td' class='td-num'>".($found_qty > 0 ? rp($found_qty) : '-')."</td>";
+                                    echo "<td rowspan='$rs_td' class='td-num'>".($found_tarif > 0 ? rp($found_tarif) : '-')."</td>";
+                                    echo "<td rowspan='$rs_td' class='td-num td-jml'>".($found_jml > 0 ? rp($found_jml) : '-')."</td>";
+                                } else {
+                                    // FIX: Tampilkan SEMUA item dari layout (qty=0 → '-')
+                                    // Ini memastikan semua kolom komponen honor muncul di slip
+                                    $rs_td = $has_vert ? ($rs + 1) : $rs;
+                                    foreach ($items as $it) {
+                                        $rid   = (int)$it['id_rincian'];
+                                        $k     = $row_data['komponen'][$rid] ?? null;
+                                        $tarif = (float)($k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0));
+                                        $qty   = (float)($k ? $k['qty'] : 0);
+                                        $jml   = $qty * $tarif;
 
-                                    // Qty: tampilkan angka + label satuan, atau '-' jika 0
-                                    $qty_disp  = ($qty > 0) ? rp($qty) . ($sat ? '<br><span style="font-size:8px;color:#666;">'.$sat.'</span>' : '') : '-';
-                                    $trf_disp  = ($tarif > 0) ? rp($tarif) : '-';
-                                    $jml_disp  = ($jml > 0) ? rp($jml) : '-';
-
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>$qty_disp</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num'>$trf_disp</td>";
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='td-num td-jml'>$jml_disp</td>";
+                                        echo "<td rowspan='$rs_td' class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
+                                        echo "<td rowspan='$rs_td' class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
+                                        echo "<td rowspan='$rs_td' class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
+                                    }
                                 }
                             }
                         }
                         
-                        // Render Kolom Vertikal — semua item dari layout ditampilkan
+                        // Render Kolom Vertikal (Hanya item dengan data)
                         if ($has_vert && isset($active_vItems[$vi])) {
                             $v    = $active_vItems[$vi];
                             $rid  = (int)$v['id_rincian'];
                             $k    = $row_data['komponen'][$rid] ?? null;
-                            $tarif = $k ? $k['tarif'] : ((float)($master_tarif[$rid]['besaran'] ?? 0));
+                            $tarif = $k ? $k['tarif'] : ($master_tarif[$rid]['besaran'] ?? 0);
                             $qty  = $k ? $k['qty'] : 0;
                             $jml  = $qty * $tarif;
-                            $sat  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
                             
                             echo "<td class='td-vert-label'>".htmlspecialchars($v['label'])."</td>";
-                            $qty_disp_v = ($qty > 0) ? rp($qty) . ($sat ? '<br><span style="font-size:8px;color:#666;">'.$sat.'</span>' : '') : '-';
-                            echo "<td class='td-num'>$qty_disp_v</td>";
+                            echo "<td class='td-num'>".($qty > 0 ? rp($qty) : '-')."</td>";
                             echo "<td class='td-num'>".($tarif > 0 ? rp($tarif) : '-')."</td>";
                             echo "<td class='td-num td-jml'>".($jml > 0 ? rp($jml) : '-')."</td>";
 
