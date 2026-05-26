@@ -155,6 +155,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                         <input type="text" name="nama" id="inpNamaGen" class="form-control rounded-3 border fw-bold px-3 py-2" required placeholder="Contoh: Pembayaran Honor Smt Ganjil">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Judul Honor (untuk Header PDF)</label>
+                        <input type="text" name="judul_honor" id="inpJudulHonor" class="form-control rounded-3 border px-3 py-2" placeholder="Contoh: Honor Pembuat Soal UTS Ganjil 2025/2026">
+                        <div class="form-text text-muted">Ditampilkan sebagai judul di tengah dokumen PDF (bawah nama institusi).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Periode Semester (untuk Header PDF)</label>
+                        <input type="text" name="periode_semester" id="inpPeriodeSmt" class="form-control rounded-3 border px-3 py-2" placeholder="Contoh: Semester Ganjil 2025/2026">
+                        <div class="form-text text-muted">Ditampilkan sebagai keterangan periode di header dokumen PDF.</div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label small fw-bold text-primary">Pilih Layout Template Tabel <span class="text-danger">*</span></label>
                         <select name="template_id" id="inpTemplateGen" class="form-select rounded-3 border-primary shadow-sm fw-bold px-3 py-2 bg-white" required>
                             <option value="">-- Pilih Template --</option>
@@ -195,7 +205,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         });
     }
     function showModalGenerate() { document.getElementById('formNewGen').reset(); document.getElementById('actionGen').value = 'init_generate'; document.getElementById('titleGen').innerHTML = '<i class="fas fa-cogs me-2 text-warning"></i>Buat Batch Generate Honor'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
-    function editHeaderGen(g) { document.getElementById('actionGen').value = 'edit_generate_header'; document.getElementById('editGenId').value = g.id; document.getElementById('inpNamaGen').value = g.nama_generate; document.getElementById('inpTemplateGen').value = g.template_id; document.getElementById('inpBlnGen').value = g.periode_bulan; document.getElementById('inpThnGen').value = g.periode_tahun; document.getElementById('titleGen').innerHTML = '<i class="fas fa-edit me-2 text-warning"></i>Edit Batch Generate'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
+    function editHeaderGen(g) { document.getElementById('actionGen').value = 'edit_generate_header'; document.getElementById('editGenId').value = g.id; document.getElementById('inpNamaGen').value = g.nama_generate; document.getElementById('inpJudulHonor').value = g.judul_honor || ''; document.getElementById('inpPeriodeSmt').value = g.periode_semester || ''; document.getElementById('inpTemplateGen').value = g.template_id; document.getElementById('inpBlnGen').value = g.periode_bulan; document.getElementById('inpThnGen').value = g.periode_tahun; document.getElementById('titleGen').innerHTML = '<i class="fas fa-edit me-2 text-warning"></i>Edit Batch Generate'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
     function batalGenerate(id) { Swal.fire({ title: 'Batalkan Generate?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Batalkan!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'batal_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.reload(); }); } }); }
     function hapusGenerate(id) { Swal.fire({ title: 'Hapus Draf?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'delete_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.href='?page=honorarium&tab=generate'; }); } }); }
     </script>
@@ -294,6 +304,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             <div>
                 <span class="badge <?= $is_locked?'bg-success':'bg-secondary' ?> px-3 py-1 rounded-pill mb-1 fw-bold"><?= strtoupper($gen_head['status']) ?></span>
                 <h5 class="fw-bold mb-0 text-dark"><?= $gen_head['nama_generate'] ?></h5>
+                <?php if(!empty($gen_head['judul_honor'])): ?>
+                <div class="small text-primary fw-bold mt-1"><i class="fas fa-file-alt me-1"></i><?= htmlspecialchars($gen_head['judul_honor']) ?></div>
+                <?php endif; ?>
+                <?php if(!empty($gen_head['periode_semester'])): ?>
+                <div class="small text-muted mt-1"><i class="fas fa-calendar me-1"></i><?= htmlspecialchars($gen_head['periode_semester']) ?></div>
+                <?php endif; ?>
             </div>
             <div class="text-end">
                 <div class="small text-muted fw-bold">Periode: <span class="text-dark"><?= $periode_str ?></span></div>
