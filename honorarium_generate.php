@@ -408,10 +408,15 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         return new Intl.NumberFormat('id-ID').format(Math.round(parseFloat(val) || 0));
     }
     function fmtQty(val) {
-        // Format qty ke 2 desimal, hilangkan trailing zero yang berlebihan
-        // misal: 15 → 15,00 | 15.5 → 15,50 | 15.55 → 15,55
+        // Jangan auto-tambah desimal. Tampilkan angka apa adanya sesuai input user.
+        // misal: 15 → 15 | 15.5 → 15,5 | 15.55 → 15,55
         const num = parseFloat(val) || 0;
-        return num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (num === 0) return '0';
+        // Cek apakah bilangan bulat
+        if (Number.isInteger(num)) return num.toString();
+        // Jika ada desimal, tampilkan sesuai input (max 2 desimal, tanpa trailing zero)
+        const str = num.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        return str;
     }
     function cleanNum(str) {
         return parseFloat(String(str).replace(/[^0-9]/g, '')) || 0;

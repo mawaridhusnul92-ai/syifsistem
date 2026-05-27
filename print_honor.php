@@ -311,12 +311,16 @@ if (empty($signatures)) {
                                             $trf = $i['komponen'][$rid]['tarif'] ?? 0;
                                             if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
                                             $jml = $q * $trf;
-                                            $sat = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
-                                            $qty_disp = ($q>0) ? number_format($q,2,',','.') . ($sat ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat.'</small>' : '') : '-';
+                                            // Tampilkan qty apa adanya tanpa tambah desimal otomatis, tanpa teks satuan
+                                            if ($q > 0) {
+                                                $qty_disp = (floor($q) == $q) ? number_format($q, 0, ',', '.') : rtrim(rtrim(number_format($q, 2, ',', '.'), '0'), ',');
+                                            } else {
+                                                $qty_disp = '-';
+                                            }
                                             
                                             echo "<td rowspan='{$rs_sub}' class='text-center fw-bold'>$qty_disp</td>";
-                                            echo "<td rowspan='{$rs_sub}' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
-                                            echo "<td rowspan='{$rs_sub}' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                            echo "<td rowspan='{$rs_sub}' class='text-center'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
+                                            echo "<td rowspan='{$rs_sub}' class='text-center fw-bold'>".($jml>0?'Rp '.number_format($jml,0,',','.'):'-')."</td>";
                                         }
                                     }
                                 }
@@ -329,21 +333,25 @@ if (empty($signatures)) {
                                     $trf = $i['komponen'][$rid]['tarif'] ?? 0;
                                     if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
                                     $jml    = $q * $trf;
-                                    $sat_v  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
-                                    $qty_disp_v = ($q>0) ? number_format($q,2,',','.') . ($sat_v ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat_v.'</small>' : '') : '-';
+                                    // Tampilkan qty apa adanya tanpa tambah desimal otomatis, tanpa teks satuan
+                                    if ($q > 0) {
+                                        $qty_disp_v = (floor($q) == $q) ? number_format($q, 0, ',', '.') : rtrim(rtrim(number_format($q, 2, ',', '.'), '0'), ',');
+                                    } else {
+                                        $qty_disp_v = '-';
+                                    }
                                     
                                     echo "<td>".htmlspecialchars($v['label'])."</td>";
                                     echo "<td class='text-center fw-bold'>$qty_disp_v</td>";
-                                    echo "<td class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
-                                    echo "<td class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-center'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-center fw-bold'>".($jml>0?'Rp '.number_format($jml,0,',','.'):'-')."</td>";
 
                                     $pajak_pct_row = (float)($i['pajak_pct'] ?? 0);
                                     $item_bruto    = $jml;
                                     $item_pajak    = round($item_bruto * $pajak_pct_row / 100);
                                     $item_netto    = $item_bruto - $item_pajak;
-                                    echo "<td class='text-end fw-bold'>".($item_bruto>0?number_format($item_bruto,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-center fw-bold'>".($item_bruto>0?'Rp '.number_format($item_bruto,0,',','.'):'-')."</td>";
                                     echo "<td class='text-center text-danger fw-bold'>".($item_pajak>0?'Rp '.number_format($item_pajak,0,',','.'):'-')."</td>";
-                                    echo "<td class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".($item_netto>0?number_format($item_netto,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-center fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".($item_netto>0?'Rp '.number_format($item_netto,0,',','.'):'-')."</td>";
 
                                 } else if ($vCount === 0) {
                                     // tidak ada grup vertikal — skip
@@ -354,9 +362,9 @@ if (empty($signatures)) {
 
                                 // CETAK TOTAL (Bruto, Pajak, Netto) — hanya untuk layout NON-vertikal, baris pertama sub_row
                                 if (!$has_vert && $vi === 0) {
-                                    echo "<td rowspan='1' class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
+                                    echo "<td rowspan='1' class='text-center fw-bold'>Rp ".number_format($i['tot_bruto'],0,',','.')."</td>";
                                     echo "<td rowspan='1' class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
-                                    echo "<td rowspan='1' class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
+                                    echo "<td rowspan='1' class='text-center fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>Rp ".number_format($i['tot_netto'],0,',','.')."</td>";
                                 }
                                 
                                 echo "</tr>";
@@ -367,11 +375,11 @@ if (empty($signatures)) {
                                 echo "<tr style='background-color: #e3f2fd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>";
                                 echo "<td class='fw-bold text-center'>TOTAL</td>";
                                 echo "<td class='text-center fw-bold'>-</td>";
-                                echo "<td class='text-end fw-bold'>-</td>";
-                                echo "<td class='text-end fw-bold'>-</td>";
-                                echo "<td class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
+                                echo "<td class='text-center fw-bold'>-</td>";
+                                echo "<td class='text-center fw-bold'>-</td>";
+                                echo "<td class='text-center fw-bold'>Rp ".number_format($i['tot_bruto'],0,',','.')."</td>";
                                 echo "<td class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
-                                echo "<td class='text-end fw-bold' style='background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
+                                echo "<td class='text-center fw-bold' style='background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>Rp ".number_format($i['tot_netto'],0,',','.')."</td>";
                                 echo "</tr>";
                             }
 
@@ -382,9 +390,9 @@ if (empty($signatures)) {
                 <tfoot class="fw-bold" style="background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                     <tr>
                         <td colspan="<?= $col_count ?>" class="text-end">SUBTOTAL <?= htmlspecialchars($nama_gen) ?></td>
-                        <td class="text-end"><?= number_format($sub_bruto, 0, ',', '.') ?></td>
-                        <td class="text-end text-danger">- <?= number_format($sub_pajak, 0, ',', '.') ?></td>
-                        <td class="text-end" style="background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;">Rp <?= number_format($sub_netto, 0, ',', '.') ?></td>
+                        <td class="text-center">Rp <?= number_format($sub_bruto, 0, ',', '.') ?></td>
+                        <td class="text-center text-danger">Rp <?= number_format($sub_pajak, 0, ',', '.') ?></td>
+                        <td class="text-center" style="background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;">Rp <?= number_format($sub_netto, 0, ',', '.') ?></td>
                     </tr>
                 </tfoot>
             </table>
