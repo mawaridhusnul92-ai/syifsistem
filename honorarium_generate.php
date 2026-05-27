@@ -539,11 +539,14 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             let tdJml = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
             const vertItems = vertGroup.items || [], isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
             if (shouldShow) {
-                if (tdQty) tdQty.style.display = ''; if (tdTarif) tdTarif.style.display = ''; if (tdJml) tdJml.style.display = '';
+                if (tdQty) { tdQty.style.visibility = ''; tdQty.style.opacity = ''; tdQty.style.pointerEvents = ''; }
+                if (tdTarif) { tdTarif.style.visibility = ''; tdTarif.style.opacity = ''; tdTarif.style.pointerEvents = ''; }
+                if (tdJml) { tdJml.style.visibility = ''; tdJml.style.opacity = ''; tdJml.style.pointerEvents = ''; }
                 if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = ''; }
             } else {
-                if (tdQty) { tdQty.style.display = 'none'; const qi = tdQty.querySelector('input[type="number"]'); if (qi) qi.value = 0; }
-                if (tdTarif) tdTarif.style.display = 'none'; if (tdJml) tdJml.style.display = 'none';
+                if (tdQty) { tdQty.style.visibility = 'hidden'; tdQty.style.opacity = '0'; tdQty.style.pointerEvents = 'none'; const qi = tdQty.querySelector('input[type="number"]'); if (qi) qi.value = 0; }
+                if (tdTarif) { tdTarif.style.visibility = 'hidden'; tdTarif.style.opacity = '0'; tdTarif.style.pointerEvents = 'none'; }
+                if (tdJml) { tdJml.style.visibility = 'hidden'; tdJml.style.opacity = '0'; tdJml.style.pointerEvents = 'none'; }
                 if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = 'none'; }
             }
         });
