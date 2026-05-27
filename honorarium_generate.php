@@ -14,6 +14,12 @@
  * - input qty diberi class khusus "inp-qty-{rid}" agar query lebih eksplisit.
  * - calcRow dipanggil juga saat baris dimuat dari matrixDetails (load existing data).
  * - formatRpJS menerima angka float dengan benar (tidak strip desimal sblm format).
+ *
+ * LAYOUT FIX:
+ * - Kolom POTONGAN / HONOR DITERIMA / AKSI diberi border-left agar tidak tergeser secara visual.
+ * - min-width HONOR DITERIMA dinaikkan agar tidak terpotong.
+ * - Kolom TENAGA PENGAJAR menggunakan align-top + vertical-align:top agar
+ *   dropdown dosen sejajar baris pertama, bukan tengah, saat ada sub-rows.
  */
 
 $view_mode = $_GET['view'] ?? 'list';
@@ -22,6 +28,7 @@ $gen_id = (int)($_GET['id'] ?? 0);
 $generate_list = [];
 $res_gen = $conn->query("SELECT g.*, t.nama_template, t.jenis_tujuan FROM honor_generate g LEFT JOIN honor_template t ON g.template_id = t.id ORDER BY g.id DESC");
 if($res_gen) while($r = $res_gen->fetch_assoc()) $generate_list[] = $r;
+
 
 // Hanya template PENGAJUAN yang digunakan untuk generate honor (input data 1x)
 $templates = $conn->query("SELECT * FROM honor_template WHERE jenis_tujuan='PENGAJUAN' ORDER BY nama_template ASC")->fetch_all(MYSQLI_ASSOC);
@@ -68,6 +75,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 }
 ?>
 
+
 <style>
     .table-gen th { background-color: #f8fafc !important; color: #475569 !important; font-size: 11px; text-transform: uppercase; padding: 12px 8px; border: 1px solid #e2e8f0; text-align: center; vertical-align: middle;}
     .table-gen td { font-size: 13px; vertical-align: middle; padding: 6px; border: 1px solid #e2e8f0; color: #1e293b; }
@@ -94,9 +102,17 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     input.inp-qty, input.inp-pajak-pct { -moz-appearance: textfield; appearance: textfield; }
     /* Warna khusus input qty agar lebih jelas saat diisi */
     input.inp-qty { color: #0d6efd; font-weight: 700; }
+
+    /* ── FIX: Tenaga Pengajar selalu rata atas ── */
+    .td-dosen { vertical-align: top !important; padding-top: 8px !important; }
+    /* ── FIX: Pemisah visual kolom POTONGAN | HONOR DITERIMA | AKSI ── */
+    .td-potongan { border-left: 2px solid #94a3b8 !important; min-width: 130px; white-space: nowrap; }
+    .td-netto    { border-left: 2px solid #94a3b8 !important; min-width: 155px; white-space: nowrap; }
+    .td-aksi     { border-left: 2px solid #94a3b8 !important; min-width: 80px; }
 </style>
 
 <div class="animate__animated animate__fadeIn">
+
 <?php if ($view_mode == 'list'): ?>
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="fw-bold mb-0 text-dark">Daftar Generate Honor</h5>
@@ -137,6 +153,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             </table>
         </div>
     </div>
+
 
     <script>
     const modalGenHTML = `
@@ -200,6 +217,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     function hapusGenerate(id) { Swal.fire({ title: 'Hapus Draf?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'delete_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.href='?page=honorarium&tab=generate'; }); } }); }
     </script>
 
+
 <?php elseif ($view_mode == 'detail'): 
     $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
     $periode_str = $nm_bln[$gen_head['periode_bulan']] . ' ' . $gen_head['periode_tahun'];
@@ -237,8 +255,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $gSingleCol = !empty($firstItem['single_jafung_col']);
         
         if ($gSingleCol) {
-            // Mode 1 Kolom: QTY (dengan satuan dari komponen) | TARIF | JUMLAH
-            // Ambil satuan dari rincian komponen pertama
             $first_rid   = (int)($items[0]['id_rincian'] ?? 0);
             $sat_map = ['Per Mahasiswa'=>'Mhs','Per SKS'=>'SKS','Per Pertemuan'=>'Pertemuan',
                         'Per Kegiatan'=>'Kegiatan','Per Jam'=>'Jam','Per Soal'=>'Soal','Lump Sum'=>'Ls'];
@@ -258,7 +274,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         } else {
             $cs = count($items) * 3;
             if (!empty($gHeader)) {
-                $cs += 1; // tambah 1 untuk kolom uraian
+                $cs += 1;
                 $hdr1 .= "<th colspan='$cs' class='th-group'>".strtoupper($gName)."</th>";
                 $hdr2 .= "<th class='cell-qty' style='min-width:120px;'>".strtoupper($gHeader)."</th>";
             } else {
@@ -286,9 +302,14 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
-    $hdr1 .= "<th rowspan='2' style='min-width: 130px;'>TOTAL BRUTO</th><th rowspan='2' style='min-width: 80px;'>PAJAK (%)</th><th rowspan='2' style='min-width: 120px;'>POTONGAN</th><th rowspan='2' style='min-width: 140px;' class='text-end pe-4'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' style='min-width: 90px;'>Aksi</th>";
+    // FIX: Tambah white-space:nowrap + min-width lebih besar + border-left pada kolom akhir
+    $hdr1 .= "<th rowspan='2' style='min-width:130px; white-space:nowrap;'>TOTAL BRUTO</th>";
+    $hdr1 .= "<th rowspan='2' style='min-width:80px; white-space:nowrap;'>PAJAK (%)</th>";
+    $hdr1 .= "<th rowspan='2' class='th-separator' style='min-width:130px; white-space:nowrap; border-left:2px solid #94a3b8;'>POTONGAN</th>";
+    $hdr1 .= "<th rowspan='2' class='th-separator text-end pe-3' style='min-width:155px; white-space:nowrap; border-left:2px solid #94a3b8;'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th rowspan='2' class='th-separator' style='min-width:80px; white-space:nowrap; border-left:2px solid #94a3b8;'>Aksi</th>";
 ?>
+
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
             <div>
@@ -348,13 +369,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     </div>
 
 
+
     <script>
     // ================================================================
-    //  HONOR GENERATE — JAVASCRIPT ENGINE (FINAL STABLE v3)
-    //  Metode insert baris: createElement + appendChild
-    //  Ini satu-satunya cara aman memasukkan <tr> ke <tbody> di semua
-    //  browser. insertAdjacentHTML/innerHTML di-strip oleh HTML parser
-    //  saat target adalah <table> atau <tbody>.
+    //  HONOR GENERATE — JAVASCRIPT ENGINE
     // ================================================================
 
     const isLocked      = <?= $is_locked ? 'true' : 'false' ?>;
@@ -366,25 +384,20 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     const horizGroups = <?= json_encode($horiz_groups) ?>;
     const vertGroup   = <?= json_encode($vert_group_info) ?>;
     const masterTarif = <?= json_encode($rincian_master) ?>;
-    // Lookup tarif berdasarkan jabatan fungsional: jafungTarif[komp_id][jabatan] = {id, besaran, potongan_pajak}
     const jafungTarif = <?= json_encode($jafung_tarif_map ?? []) ?>;
 
     let rCount = 0;
 
-    // ── Helper format & clean angka ──────────────────────────────────
     function fmtRp(val) {
         return new Intl.NumberFormat('id-ID').format(Math.round(parseFloat(val) || 0));
     }
     function cleanNum(str) {
-        // Hapus semua karakter non-digit (titik ribuan, "Rp", spasi, dll)
         return parseFloat(String(str).replace(/[^0-9]/g, '')) || 0;
     }
     function cleanPct(str) {
-        // Untuk persen: izinkan titik desimal, ganti koma jadi titik
         return parseFloat(String(str).replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
     }
 
-    // ── Opsi dropdown dosen & prodi ──────────────────────────────────
     let dosenOpts = [{ val: '', lbl: '-- Pilih Dosen --', prodi: '', jabatan: '' }];
     dosenData.forEach(d => dosenOpts.push({
         val: d.id, lbl: d.nama,
@@ -394,244 +407,122 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
     function syncProdi(selDosen, rowId) {
         const opt = selDosen.options[selDosen.selectedIndex];
-        // Isi kolom Prodi
         const pInp = document.querySelector(`#hr_${rowId} .inp-prodi`);
         if (pInp) pInp.value = (opt && opt.value) ? (opt.dataset.prodi || '') : '';
-        // FIX: Isi dropdown Jabatan Fungsional otomatis dari data dosen
         const jSel = document.querySelector(`#hr_${rowId} .inp-jabatan`);
         const jabatan = (opt && opt.value) ? (opt.dataset.jabatan || '') : '';
-        if (jSel) {
-            jSel.value = jabatan;
-        }
-        // Update tarif per jabatan fungsional & filter komponen
+        if (jSel) jSel.value = jabatan;
         updateJafungTarif(rowId, jabatan);
         filterKomponenByJabatan(rowId, jabatan);
     }
 
-    /**
-     * updateJafungTarif — update nilai tarif pada sel-sel yang is_jafung=true
-     * berdasarkan jabatan fungsional dosen yang dipilih.
-     * FIX: Mencakup horizGroups DAN vertGroup, plus fallback is_jafung dari masterTarif.
-     */
     function updateJafungTarif(rowId, jabatan) {
         const tbody = document.getElementById(`hr_${rowId}`);
         if (!tbody) return;
-
         let pajakBaru = null;
-
-        // ── Helper: proses satu item komponen ────────────────────────
         function processItem(c) {
             const rid   = c.id_rincian;
             const mData = masterTarif[rid] || null;
             if (!mData) return;
-
-            // Cek is_jafung: dari template JSON atau dari masterTarif (fallback)
             const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
-            if (!isJafung) return; // skip jika bukan jafung
-
+            if (!isJafung) return;
             const kompId = String(mData.komp_id);
-
-            // Cari tarif yang cocok dengan jabatan dosen
-            let tarifBaru = mData.besaran;
-            let pajak     = mData.potongan_pajak;
-            let ridBaru   = String(rid);
-
+            let tarifBaru = mData.besaran, pajak = mData.potongan_pajak, ridBaru = String(rid);
             if (jabatan && jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
-                const jt  = jafungTarif[kompId][jabatan];
-                tarifBaru = jt.besaran;
-                pajak     = jt.potongan_pajak;
-                ridBaru   = String(jt.id);
+                const jt = jafungTarif[kompId][jabatan];
+                tarifBaru = jt.besaran; pajak = jt.potongan_pajak; ridBaru = String(jt.id);
             }
-
-            // Update hidden rincian_ids di td-qty dengan rid baru
             const tdQty = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
             if (tdQty) {
                 const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
                 if (hidRid) {
-                    // Ganti data-rid di semua td yang masih pakai rid lama
-                    if (ridBaru !== String(rid)) {
-                        tbody.querySelectorAll(`td[data-rid="${rid}"]`).forEach(td => {
-                            td.dataset.rid = ridBaru;
-                        });
-                    }
+                    if (ridBaru !== String(rid)) tbody.querySelectorAll(`td[data-rid="${rid}"]`).forEach(td => td.dataset.rid = ridBaru);
                     hidRid.value = ridBaru;
                 }
-                // BUGFIX: update qty/kompId input names to match new rid
-                if (ridBaru !== String(rid)) {
-                    const qtyInp = tdQty.querySelector('.inp-qty');
-                    if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
-                }
+                if (ridBaru !== String(rid)) { const qi = tdQty.querySelector('.inp-qty'); if (qi) qi.name = `komp_qty_${ridBaru}[]`; }
             }
-
-            // Update tarif di td-tarif (pakai ridBaru karena data-rid sudah diupdate)
             const tdTarif = tbody.querySelector(`td[data-rid="${ridBaru}"][data-role="td-tarif"]`);
             if (tdTarif) {
                 const trfInp = tdTarif.querySelector('.inp-tarif');
                 if (trfInp) {
                     trfInp.value = fmtRp(tarifBaru);
-                    // BUGFIX: update tarif/kompId input names to match new rid
                     if (ridBaru !== String(rid)) {
                         trfInp.name = `komp_tarif_${ridBaru}[]`;
-                        const kidInp = tdTarif.querySelector(`input[name="komp_kompId_${rid}[]"]`);
-                        if (kidInp) kidInp.name = `komp_kompId_${ridBaru}[]`;
+                        const ki = tdTarif.querySelector(`input[name="komp_kompId_${rid}[]"]`);
+                        if (ki) ki.name = `komp_kompId_${ridBaru}[]`;
                     }
-                    // Highlight visual singkat agar user tahu tarif berubah
-                    trfInp.style.background = '#fef9c3';
-                    trfInp.style.color = '#b45309';
-                    setTimeout(() => {
-                        trfInp.style.background = '';
-                        trfInp.style.color = '';
-                    }, 1500);
+                    trfInp.style.background = '#fef9c3'; trfInp.style.color = '#b45309';
+                    setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500);
                 }
             }
-
             if (pajakBaru === null) pajakBaru = pajak;
         }
-
-        // ── Proses semua grup horizontal ─────────────────────────────
         for (const g in horizGroups) {
             const firstItem = horizGroups[g][0] || {};
             const gSingleCol = firstItem.single_jafung_col || false;
-            
             if (gSingleCol && jabatan) {
-                // MODE SINGLE COL: update rid dan tarif berdasarkan jabatan
-                const items = horizGroups[g];
-                const mDataFirst = masterTarif[items[0].id_rincian] || null;
+                const items = horizGroups[g], mDataFirst = masterTarif[items[0].id_rincian] || null;
                 if (mDataFirst) {
                     const kompId = String(mDataFirst.komp_id);
                     if (jafungTarif[kompId] && jafungTarif[kompId][jabatan]) {
-                        const jt = jafungTarif[kompId][jabatan];
-                        const ridBaru = String(jt.id);
-                        const tarifBaru = jt.besaran;
+                        const jt = jafungTarif[kompId][jabatan], ridBaru = String(jt.id), tarifBaru = jt.besaran;
                         if (pajakBaru === null) pajakBaru = jt.potongan_pajak;
-                        
-                        // Find the single-col td by group name
                         const tdQty = tbody.querySelector(`td[data-single-col="true"][data-group-name="${g}"][data-role="td-qty"]`);
                         if (tdQty) {
                             const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
-                            const oldRid = tdQty.dataset.rid;
                             if (hidRid) hidRid.value = ridBaru;
-                            // Update data-rid on all related tds
-                            tbody.querySelectorAll(`td[data-single-col="true"][data-group-name="${g}"]`).forEach(td => {
-                                td.dataset.rid = ridBaru;
-                            });
-                            // Update input names to match new rid
-                            const qtyInp = tdQty.querySelector('.inp-qty');
-                            if (qtyInp) qtyInp.name = `komp_qty_${ridBaru}[]`;
+                            tbody.querySelectorAll(`td[data-single-col="true"][data-group-name="${g}"]`).forEach(td => td.dataset.rid = ridBaru);
+                            const qi = tdQty.querySelector('.inp-qty'); if (qi) qi.name = `komp_qty_${ridBaru}[]`;
                         }
                         const tdTarif = tbody.querySelector(`td[data-single-col="true"][data-group-name="${g}"][data-role="td-tarif"]`);
                         if (tdTarif) {
                             const trfInp = tdTarif.querySelector('.inp-tarif');
-                            if (trfInp) {
-                                trfInp.value = fmtRp(tarifBaru);
-                                trfInp.name = `komp_tarif_${ridBaru}[]`;
-                                trfInp.style.background = '#fef9c3';
-                                trfInp.style.color = '#b45309';
-                                setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500);
-                            }
-                            const kidInp = tdTarif.querySelector('input[type="hidden"]');
-                            if (kidInp) { kidInp.value = mDataFirst.komp_id; kidInp.name = `komp_kompId_${ridBaru}[]`; }
+                            if (trfInp) { trfInp.value = fmtRp(tarifBaru); trfInp.name = `komp_tarif_${ridBaru}[]`; trfInp.style.background = '#fef9c3'; trfInp.style.color = '#b45309'; setTimeout(() => { trfInp.style.background = ''; trfInp.style.color = ''; }, 1500); }
+                            const ki = tdTarif.querySelector('input[type="hidden"]');
+                            if (ki) { ki.value = mDataFirst.komp_id; ki.name = `komp_kompId_${ridBaru}[]`; }
                         }
                     }
                 }
-            } else {
-                horizGroups[g].forEach(c => processItem(c));
-            }
+            } else { horizGroups[g].forEach(c => processItem(c)); }
         }
-
-        // ── Proses grup vertikal ──────────────────────────────────────
         const vItems = vertGroup.items || [];
         vItems.forEach(c => processItem(c));
-
-        // Update pajak jika ada nilai baru
-        if (pajakBaru !== null) {
-            const pajakInp = tbody.querySelector('.inp-pajak-pct');
-            if (pajakInp) pajakInp.value = pajakBaru;
-        }
-
+        if (pajakBaru !== null) { const pi = tbody.querySelector('.inp-pajak-pct'); if (pi) pi.value = pajakBaru; }
         calcRow(rowId);
     }
 
-    /**
-     * filterKomponenByJabatan — Menyembunyikan/menampilkan komponen honor
-     * berdasarkan jabatan fungsional yang dipilih.
-     * Komponen yang is_jafung=true dan memiliki jabatan_fungsional berbeda
-     * dari jabatan yang dipilih akan di-hide (qty di-set 0 & visual hidden).
-     * Hanya komponen yang sesuai jabatan yang ditampilkan.
-     */
     function filterKomponenByJabatan(rowId, jabatan) {
         const tbody = document.getElementById(`hr_${rowId}`);
         if (!tbody) return;
-
-        // Kumpulkan semua item komponen yang is_jafung dari horizGroups dan vertGroup
         const allItems = [...Object.values(horizGroups).flat(), ...(vertGroup.items || [])];
-
         allItems.forEach(c => {
-            const rid   = String(c.id_rincian);
-            const mData = masterTarif[rid] || null;
+            const rid = String(c.id_rincian), mData = masterTarif[rid] || null;
             if (!mData) return;
-
             const isJafung = c.is_jafung || (String(mData.is_jafung) === '1');
-            if (!isJafung) return; // Non-jafung selalu tampil
-            
-            // Skip items dari single_jafung_col groups (ditangani oleh updateJafungTarif)
+            if (!isJafung) return;
             if (c.single_jafung_col) return;
-
             const kompId = String(mData.komp_id);
-
-            // Cek apakah rincian ini cocok dengan jabatan yang dipilih
             let shouldShow = true;
             if (jabatan && jafungTarif[kompId]) {
-                // Jika komponen ini punya mapping per jabatan, cek kecocokan
-                const jabatanRincian = mData.jabatan_fungsional || '';
-                if (jabatanRincian && jabatanRincian !== jabatan) {
-                    shouldShow = false;
-                }
+                const jabR = mData.jabatan_fungsional || '';
+                if (jabR && jabR !== jabatan) shouldShow = false;
             }
-
-            // Cari semua td yang terkait rid ini (bisa jadi sudah berubah ridnya via updateJafungTarif)
-            // Kita cari berdasarkan rid asli terlebih dahulu
-            let tdQty  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
+            let tdQty = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
             let tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
-            let tdJml  = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
-
-            // Untuk vertical items, cari juga row label-nya
-            const vertItems = vertGroup.items || [];
-            const isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
-
+            let tdJml = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
+            const vertItems = vertGroup.items || [], isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
             if (shouldShow) {
-                if (tdQty)   tdQty.style.display = '';
-                if (tdTarif) tdTarif.style.display = '';
-                if (tdJml)   tdJml.style.display = '';
-                // Untuk vertikal, tampilkan juga tr-nya
-                if (isVertItem && tdQty) {
-                    const tr = tdQty.closest('tr');
-                    if (tr) tr.style.display = '';
-                }
+                if (tdQty) tdQty.style.display = ''; if (tdTarif) tdTarif.style.display = ''; if (tdJml) tdJml.style.display = '';
+                if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = ''; }
             } else {
-                if (tdQty) {
-                    tdQty.style.display = 'none';
-                    // Set qty ke 0 agar tidak dihitung
-                    const qtyInp = tdQty.querySelector('input[type="number"]');
-                    if (qtyInp) qtyInp.value = 0;
-                }
-                if (tdTarif) tdTarif.style.display = 'none';
-                if (tdJml)   tdJml.style.display = 'none';
-                // Untuk vertikal, sembunyikan juga tr-nya
-                if (isVertItem && tdQty) {
-                    const tr = tdQty.closest('tr');
-                    if (tr) tr.style.display = 'none';
-                }
+                if (tdQty) { tdQty.style.display = 'none'; const qi = tdQty.querySelector('input[type="number"]'); if (qi) qi.value = 0; }
+                if (tdTarif) tdTarif.style.display = 'none'; if (tdJml) tdJml.style.display = 'none';
+                if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = 'none'; }
             }
         });
-
-        // Recalculate setelah filter
         calcRow(rowId);
     }
 
-    // ================================================================
-    //  createCell — Buat satu <td> dengan innerHTML aman
-    // ================================================================
     function createCell(innerHtml, opts = {}) {
         const td = document.createElement('td');
         if (opts.rowspan && opts.rowspan > 1) td.rowSpan = opts.rowspan;
@@ -643,127 +534,62 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         return td;
     }
 
-    // ── Helper: buat set kolom komponen (QTY|Tarif|Jumlah) untuk 1 <tr> ──
-    // Digunakan oleh addHonorMatrixRow DAN addSubRow
     function appendKomponenCols(tr, rowId, d) {
         for (const g in horizGroups) {
             const firstItem  = horizGroups[g][0] || {};
             const gHeader    = firstItem.group_header || '';
             const gSingleCol = firstItem.single_jafung_col || false;
-
             if (gSingleCol) {
                 const items = horizGroups[g];
-                let activeRid  = items[0].id_rincian;
-                let activeData = masterTarif[activeRid] || null;
-                let q = 0, t = activeData ? activeData.besaran : 0;
-                if (d) {
-                    for (const c of items) {
-                        if (d.komponen?.[c.id_rincian] && d.komponen[c.id_rincian].qty > 0) {
-                            activeRid  = c.id_rincian;
-                            activeData = masterTarif[activeRid] || null;
-                            q = d.komponen[activeRid].qty;
-                            t = d.komponen[activeRid].tarif;
-                            break;
-                        }
-                    }
-                }
-                if (d && d.dosen_jabatan) {
-                    const kompId = activeData ? String(activeData.komp_id) : '';
-                    if (kompId && jafungTarif[kompId] && jafungTarif[kompId][d.dosen_jabatan]) {
-                        const jt = jafungTarif[kompId][d.dosen_jabatan];
-                        activeRid = String(jt.id); t = jt.besaran;
-                    }
-                }
-                const inpHid = document.createElement('input');
-                inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
-                const inpGrpInfo = document.createElement('input');
-                inpGrpInfo.type = 'hidden'; inpGrpInfo.name = 'single_col_group[]'; inpGrpInfo.value = g;
-                const inpQty = document.createElement('input');
-                inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`;
-                inpQty.className = 'inp-gen text-center inp-qty';
-                inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
-                if (isLocked) inpQty.disabled = true;
-                inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
-                const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: activeRid, dataRole: 'td-qty' });
-                tdQ.dataset.singleCol = 'true'; tdQ.dataset.groupName = g;
-                tdQ.appendChild(inpHid); tdQ.appendChild(inpGrpInfo); tdQ.appendChild(inpQty);
-                tr.appendChild(tdQ);
-                const inpTrf = document.createElement('input');
-                inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`;
-                inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                const inpKid = document.createElement('input');
-                inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`;
-                inpKid.value = activeData ? activeData.komp_id : 0;
-                const tdT = createCell('', { cls: 'cell-nom align-middle', dataRid: activeRid, dataRole: 'td-tarif' });
-                tdT.dataset.singleCol = 'true'; tdT.dataset.groupName = g;
-                tdT.appendChild(inpTrf); tdT.appendChild(inpKid); tr.appendChild(tdT);
-                const inpJml = document.createElement('input');
-                inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
-                inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: activeRid, dataRole: 'td-jml' });
-                tdJ.dataset.singleCol = 'true'; tdJ.dataset.groupName = g;
-                tdJ.appendChild(inpJml); tr.appendChild(tdJ);
+                let activeRid = items[0].id_rincian, activeData = masterTarif[activeRid] || null, q = 0, t = activeData ? activeData.besaran : 0;
+                if (d) { for (const c of items) { if (d.komponen?.[c.id_rincian] && d.komponen[c.id_rincian].qty > 0) { activeRid = c.id_rincian; activeData = masterTarif[activeRid] || null; q = d.komponen[activeRid].qty; t = d.komponen[activeRid].tarif; break; } } }
+                if (d && d.dosen_jabatan) { const ki = activeData ? String(activeData.komp_id) : ''; if (ki && jafungTarif[ki] && jafungTarif[ki][d.dosen_jabatan]) { const jt = jafungTarif[ki][d.dosen_jabatan]; activeRid = String(jt.id); t = jt.besaran; } }
+                const inpHid = document.createElement('input'); inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = activeRid;
+                const inpGI = document.createElement('input'); inpGI.type = 'hidden'; inpGI.name = 'single_col_group[]'; inpGI.value = g;
+                const inpQty = document.createElement('input'); inpQty.type = 'number'; inpQty.name = `komp_qty_${activeRid}[]`; inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0'; if (isLocked) inpQty.disabled = true; inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
+                const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: activeRid, dataRole: 'td-qty' }); tdQ.dataset.singleCol = 'true'; tdQ.dataset.groupName = g; tdQ.appendChild(inpHid); tdQ.appendChild(inpGI); tdQ.appendChild(inpQty); tr.appendChild(tdQ);
+                const inpTrf = document.createElement('input'); inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${activeRid}[]`; inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t); inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+                const inpKid = document.createElement('input'); inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${activeRid}[]`; inpKid.value = activeData ? activeData.komp_id : 0;
+                const tdT = createCell('', { cls: 'cell-nom align-middle', dataRid: activeRid, dataRole: 'td-tarif' }); tdT.dataset.singleCol = 'true'; tdT.dataset.groupName = g; tdT.appendChild(inpTrf); tdT.appendChild(inpKid); tr.appendChild(tdT);
+                const inpJml = document.createElement('input'); inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+                const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: activeRid, dataRole: 'td-jml' }); tdJ.dataset.singleCol = 'true'; tdJ.dataset.groupName = g; tdJ.appendChild(inpJml); tr.appendChild(tdJ);
             } else {
                 if (gHeader) {
                     const uraianVal = d?.uraian_horiz?.[g] || '';
-                    const inpUraian = document.createElement('input');
-                    inpUraian.type = 'text'; inpUraian.name = `uraian_horiz_${encodeURIComponent(g)}[]`;
-                    inpUraian.className = 'inp-gen text-dark'; inpUraian.value = uraianVal;
-                    inpUraian.placeholder = gHeader;
-                    if (isLocked) inpUraian.disabled = true;
-                    const tdU = createCell('', { cls: 'align-middle', dataRid: `uraian_${g}`, dataRole: 'td-uraian' });
-                    tdU.appendChild(inpUraian); tr.appendChild(tdU);
+                    const inpU = document.createElement('input'); inpU.type = 'text'; inpU.name = `uraian_horiz_${encodeURIComponent(g)}[]`; inpU.className = 'inp-gen text-dark'; inpU.value = uraianVal; inpU.placeholder = gHeader; if (isLocked) inpU.disabled = true;
+                    const tdU = createCell('', { cls: 'align-middle', dataRid: `uraian_${g}`, dataRole: 'td-uraian' }); tdU.appendChild(inpU); tr.appendChild(tdU);
                 }
                 horizGroups[g].forEach(c => {
-                    const rid   = c.id_rincian;
-                    const mData = masterTarif[rid] || null;
+                    const rid = c.id_rincian, mData = masterTarif[rid] || null;
                     let q = 0, t = mData ? mData.besaran : 0;
                     if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
-                    const inpHid = document.createElement('input');
-                    inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
-                    const inpQty = document.createElement('input');
-                    inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
-                    inpQty.className = 'inp-gen text-center inp-qty';
-                    inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
-                    if (isLocked) inpQty.disabled = true;
-                    inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
-                    const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' });
-                    tdQ.appendChild(inpHid); tdQ.appendChild(inpQty); tr.appendChild(tdQ);
-                    const inpTrf = document.createElement('input');
-                    inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
-                    inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-                    inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-                    const inpKid = document.createElement('input');
-                    inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`;
-                    inpKid.value = mData ? mData.komp_id : 0;
-                    const tdT = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' });
-                    tdT.appendChild(inpTrf); tdT.appendChild(inpKid); tr.appendChild(tdT);
-                    const inpJml = document.createElement('input');
-                    inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
-                    inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-                    const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' });
-                    tdJ.appendChild(inpJml); tr.appendChild(tdJ);
+                    const inpHid = document.createElement('input'); inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
+                    const inpQty = document.createElement('input'); inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`; inpQty.className = 'inp-gen text-center inp-qty'; inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0'; if (isLocked) inpQty.disabled = true; inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
+                    const tdQ = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' }); tdQ.appendChild(inpHid); tdQ.appendChild(inpQty); tr.appendChild(tdQ);
+                    const inpTrf = document.createElement('input'); inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`; inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t); inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+                    const inpKid = document.createElement('input'); inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`; inpKid.value = mData ? mData.komp_id : 0;
+                    const tdT = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' }); tdT.appendChild(inpTrf); tdT.appendChild(inpKid); tr.appendChild(tdT);
+                    const inpJml = document.createElement('input'); inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+                    const tdJ = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' }); tdJ.appendChild(inpJml); tr.appendChild(tdJ);
                 });
             }
         }
-        // Kolom vertikal (group_vertical)
         const vItems = vertGroup.items || [];
         if (vItems.length > 0) appendVertRow(tr, vItems[0], d, rowId);
     }
 
+
+
     // ================================================================
-    //  addHonorMatrixRow — INSERT BARIS DOSEN BARU KE TABEL
-    //  Struktur: 1 <tbody> per dosen, bisa punya banyak <tr> (sub-rows).
-    //  tr pertama: No(rowspan) + Dosen(rowspan) + teksCols + komponen + total/pajak/aksi
-    //  tr ke-2 dst (sub-row via +): teksCols + komponen + total/pajak/aksi (NO dan DOSEN di-merge)
+    //  addHonorMatrixRow — INSERT BARIS DOSEN BARU
+    //  FIX: tdDosen pakai class td-dosen (vertical-align:top) agar
+    //       dropdown selalu sejajar baris pertama, tidak di tengah.
     // ================================================================
     function addHonorMatrixRow(d = null) {
         rCount++;
         const id       = rCount;
         const readOnly = isLocked;
 
-        // Ambil pajak default dari komponen pertama
         let pajak_base = 0;
         const vItems   = vertGroup.items || [];
         const allItems = [...Object.values(horizGroups).flat(), ...vItems];
@@ -780,11 +606,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const tr1 = document.createElement('tr');
         tbody.appendChild(tr1);
 
-        // No — rowspan akan diupdate saat sub-row ditambah
+        // No
         const tdNo = createCell(id, { cls: 'text-center align-middle fw-bold row-no' });
         tr1.appendChild(tdNo);
 
-        // Dosen — rowspan juga ikut
+        // Dosen — FIX: class td-dosen memberi vertical-align:top agar sejajar baris pertama
         const selDosen = document.createElement('select');
         selDosen.name      = 'dosen_id[]';
         selDosen.className = 'inp-gen text-dark inp-dosen-w';
@@ -799,17 +625,17 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             if (d && String(o.val) === String(d.dosen_id)) opt.selected = true;
             selDosen.appendChild(opt);
         });
-        const tdDosen = createCell('', { cls: 'text-start align-middle col-dosen' });
+        const tdDosen = createCell('', { cls: 'text-start td-dosen col-dosen' });
         tdDosen.appendChild(selDosen);
         tr1.appendChild(tdDosen);
 
-        // teksCols — per baris (rowspan=1)
+        // teksCols
         _appendTeksCols(tr1, id, d, readOnly);
 
-        // Kolom komponen + vertikal
+        // Komponen + vertikal
         appendKomponenCols(tr1, id, d);
 
-        // Total / Pajak / Potongan / Netto
+        // Total / Pajak
         tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' }));
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
@@ -822,10 +648,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         };
         const tdPajak = createCell('', { cls: 'align-middle' });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', style: 'white-space:nowrap; min-width:120px;' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', style: 'white-space:nowrap; min-width:140px;' }));
 
-        // Aksi
+        // FIX: Potongan / Honor Diterima / Aksi pakai class td-potongan / td-netto / td-aksi
+        // yang memberi border-left agar kolom tidak tergeser secara visual.
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan td-potongan' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto td-netto' }));
+
         if (!readOnly) {
             const btnDel = document.createElement('button');
             btnDel.type = 'button'; btnDel.title = 'Hapus Dosen Ini';
@@ -837,7 +665,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
             btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
             btnAdd.onclick   = () => addSubRowSameDosen(id);
-            const tdAksi = createCell('', { cls: 'text-center align-middle td-aksi', style: 'min-width:70px;' });
+            const tdAksi = createCell('', { cls: 'text-center align-middle td-aksi' });
             const wrap = document.createElement('div');
             wrap.className = 'd-flex justify-content-center gap-1';
             wrap.appendChild(btnDel); wrap.appendChild(btnAdd);
@@ -848,7 +676,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         setTimeout(() => calcRow(id), 0);
     }
 
-    // ── Helper: append teksCols ke <tr> ─────────────────────────────
     function _appendTeksCols(tr, rowId, d, readOnly) {
         teksCols.forEach(c => {
             let val = '';
@@ -893,49 +720,23 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         });
     }
 
-    // ── Helper: tambah sel vertikal ke dalam <tr> ────────────────────
     function appendVertRow(tr, v, d, rowId) {
-        const rid   = v.id_rincian;
-        const mData = masterTarif[rid] || null;
+        const rid = v.id_rincian, mData = masterTarif[rid] || null;
         let q = 0, t = mData ? mData.besaran : 0;
         if (d?.komponen?.[rid]) { q = d.komponen[rid].qty; t = d.komponen[rid].tarif; }
-
         tr.appendChild(createCell(v.label, { cls: 'align-middle bg-light fw-bold text-dark' }));
-
-        const inpHid = document.createElement('input');
-        inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
-        const inpQty = document.createElement('input');
-        inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`;
-        inpQty.className = 'inp-gen text-center inp-qty bg-white';
-        inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0';
-        if (isLocked) inpQty.disabled = true;
-        inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
-        const tdQty = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' });
-        tdQty.appendChild(inpHid); tdQty.appendChild(inpQty);
-        tr.appendChild(tdQty);
-
-        const inpTrf = document.createElement('input');
-        inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`;
-        inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t);
-        inpTrf.readOnly = true; inpTrf.tabIndex = -1;
-        const inpKid = document.createElement('input');
-        inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`;
-        inpKid.value = mData ? mData.komp_id : 0;
-        const tdTrf = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' });
-        tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid);
-        tr.appendChild(tdTrf);
-
-        const inpJml = document.createElement('input');
-        inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display';
-        inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
-        const tdJml = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' });
-        tdJml.appendChild(inpJml);
-        tr.appendChild(tdJml);
+        const inpHid = document.createElement('input'); inpHid.type = 'hidden'; inpHid.name = 'rincian_ids[]'; inpHid.value = rid;
+        const inpQty = document.createElement('input'); inpQty.type = 'number'; inpQty.name = `komp_qty_${rid}[]`; inpQty.className = 'inp-gen text-center inp-qty bg-white'; inpQty.value = q; inpQty.step = '0.01'; inpQty.min = '0'; if (isLocked) inpQty.disabled = true; inpQty.oninput = inpQty.onchange = () => calcRow(rowId);
+        const tdQty = createCell('', { cls: 'cell-qty align-middle', dataRid: rid, dataRole: 'td-qty' }); tdQty.appendChild(inpHid); tdQty.appendChild(inpQty); tr.appendChild(tdQty);
+        const inpTrf = document.createElement('input'); inpTrf.type = 'text'; inpTrf.name = `komp_tarif_${rid}[]`; inpTrf.className = 'inp-gen inp-nom inp-tarif'; inpTrf.value = fmtRp(t); inpTrf.readOnly = true; inpTrf.tabIndex = -1;
+        const inpKid = document.createElement('input'); inpKid.type = 'hidden'; inpKid.name = `komp_kompId_${rid}[]`; inpKid.value = mData ? mData.komp_id : 0;
+        const tdTrf = createCell('', { cls: 'cell-nom align-middle', dataRid: rid, dataRole: 'td-tarif' }); tdTrf.appendChild(inpTrf); tdTrf.appendChild(inpKid); tr.appendChild(tdTrf);
+        const inpJml = document.createElement('input'); inpJml.type = 'text'; inpJml.className = 'inp-gen inp-nom inp-jml-display'; inpJml.value = q > 0 ? fmtRp(q * t) : '0'; inpJml.readOnly = true; inpJml.tabIndex = -1;
+        const tdJml = createCell('', { cls: 'cell-tot align-middle', dataRid: rid, dataRole: 'td-jml' }); tdJml.appendChild(inpJml); tr.appendChild(tdJml);
     }
 
-    // ================================================================
-    //  delHonorRow — hapus seluruh tbody (semua sub-rows sekaligus)
-    // ================================================================
+
+
     function delHonorRow(tbodyId) {
         const tbody = document.getElementById('hr_' + tbodyId);
         if (tbody) tbody.remove();
@@ -943,22 +744,14 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         calcSummary();
     }
 
-    // ================================================================
-    //  delSubRow — hapus 1 sub-row <tr>, kurangi rowspan No+Dosen
-    // ================================================================
     function delSubRow(tr, tbodyId) {
         const tbody = document.getElementById('hr_' + tbodyId);
         if (!tbody) return;
         const rows = tbody.querySelectorAll('tr');
-        if (rows.length <= 1) {
-            // Hanya tinggal 1 baris → hapus seluruh dosen
-            delHonorRow(tbodyId);
-            return;
-        }
-        // Kurangi rowspan No dan Dosen di tr pertama
+        if (rows.length <= 1) { delHonorRow(tbodyId); return; }
         const trFirst = tbody.querySelector('tr');
         const tdNo    = trFirst.querySelector('.row-no');
-        const tdDosen = trFirst.querySelector('.col-dosen');
+        const tdDosen = trFirst.querySelector('.td-dosen');
         if (tdNo)    tdNo.rowSpan    = Math.max(1, (tdNo.rowSpan    || 1) - 1);
         if (tdDosen) tdDosen.rowSpan = Math.max(1, (tdDosen.rowSpan || 1) - 1);
         tr.remove();
@@ -966,9 +759,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         calcSummary();
     }
 
-    // ================================================================
-    //  reindexRows — nomor urut hanya di tr pertama tiap tbody
-    // ================================================================
     function reindexRows() {
         let idx = 1;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
@@ -978,14 +768,13 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     }
 
     // ================================================================
-    //  addSubRowSameDosen — tambah <tr> baru ke tbody yang SAMA,
-    //  update rowspan No+Dosen di tr pertama
+    //  addSubRowSameDosen — tambah <tr> baru ke tbody yang SAMA
+    //  FIX: sel potongan/netto/aksi juga pakai class td-potongan/td-netto/td-aksi
     // ================================================================
     function addSubRowSameDosen(tbodyId) {
         const tbody = document.getElementById(`hr_${tbodyId}`);
         if (!tbody) return;
 
-        // Validasi: dosen harus sudah dipilih
         const selDosenParent = tbody.querySelector('select[name="dosen_id[]"]');
         const dosenId        = selDosenParent ? selDosenParent.value : '';
         if (!dosenId) {
@@ -993,31 +782,23 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             return;
         }
 
-        // Ambil jabatan dari tr pertama
-        const selJab  = tbody.querySelector('select.inp-jabatan');
-        const jabatan = selJab ? selJab.value : '';
-
-        // Ambil prodi dari tr pertama
+        const selJab   = tbody.querySelector('select.inp-jabatan');
+        const jabatan  = selJab ? selJab.value : '';
         const prodiInp = tbody.querySelector('input.inp-prodi');
         const prodi    = prodiInp ? prodiInp.value : '';
 
-        // Buat <tr> baru — TANPA kolom No dan Dosen (di-merge ke atas)
         const trNew = document.createElement('tr');
         trNew.className = 'honor-subrow';
 
-        // teksCols — baris baru kosong, prodi ikut dari parent, jabatan ikut
         const dSub = { dosen_id: dosenId, prodi: prodi, mata_kuliah: '', dosen_jabatan: jabatan, komponen: {} };
         _appendTeksCols(trNew, tbodyId, dSub, isLocked);
-
-        // Kolom komponen (kosong, qty=0)
         appendKomponenCols(trNew, tbodyId, null);
 
-        // Total / Pajak / Potongan / Netto untuk sub-row ini
+        // Total / Pajak
         trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' }));
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
         inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        // Ambil pajak dari baris pertama agar konsisten
         const pajakParent = tbody.querySelector('.inp-pajak-pct');
         inpPajak.value = pajakParent ? pajakParent.value : '0';
         inpPajak.placeholder = '0';
@@ -1028,10 +809,11 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         };
         const tdPajak = createCell('', { cls: 'align-middle' });
         tdPajak.appendChild(inpPajak); trNew.appendChild(tdPajak);
-        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan', style: 'white-space:nowrap; min-width:120px;' }));
-        trNew.appendChild(createCell('Rp 0', { cls: 'text-end pe-4 fw-bold align-middle fs-6 text-success txt-netto', style: 'white-space:nowrap; min-width:140px;' }));
 
-        // Tombol aksi sub-row: hanya hapus baris ini + tambah lagi
+        // FIX: sama seperti baris utama
+        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan td-potongan' }));
+        trNew.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto td-netto' }));
+
         if (!isLocked) {
             const btnDel = document.createElement('button');
             btnDel.type = 'button'; btnDel.title = 'Hapus Baris Ini';
@@ -1043,103 +825,77 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             btnAdd.className = 'btn-action bg-light border text-success shadow-sm';
             btnAdd.innerHTML = '<i class="fas fa-plus"></i>';
             btnAdd.onclick = () => addSubRowSameDosen(tbodyId);
-            const tdAksi = createCell('', { cls: 'text-center align-middle td-aksi', style: 'min-width:70px;' });
+            const tdAksi = createCell('', { cls: 'text-center align-middle td-aksi' });
             const wrap = document.createElement('div');
             wrap.className = 'd-flex justify-content-center gap-1';
             wrap.appendChild(btnDel); wrap.appendChild(btnAdd);
             tdAksi.appendChild(wrap); trNew.appendChild(tdAksi);
         }
 
-        // Tambah <tr> ke tbody
         tbody.appendChild(trNew);
 
         // Update rowspan No dan Dosen di tr pertama
         const trFirst = tbody.querySelector('tr:first-child');
         const tdNo    = trFirst.querySelector('.row-no');
-        const tdDosen = trFirst.querySelector('.col-dosen');
+        const tdDosen = trFirst.querySelector('.td-dosen');
         const rowCount = tbody.querySelectorAll('tr').length;
         if (tdNo)    tdNo.rowSpan    = rowCount;
         if (tdDosen) tdDosen.rowSpan = rowCount;
 
-        // Sinkronkan jabatan & tarif jika jabatan sudah terisi
         if (jabatan) {
             setTimeout(() => {
                 updateJafungTarif(tbodyId, jabatan);
                 filterKomponenByJabatan(tbodyId, jabatan);
             }, 50);
         }
-
         setTimeout(() => calcRow(tbodyId), 0);
     }
 
-    // ================================================================
-    //  calcRow — Hitung QTY × Tarif, Pajak, Netto per tbody (semua sub-rows)
-    //  Setiap <tr> dalam tbody punya kolom komponen + total sendiri.
-    //  Total keseluruhan tbody = sum semua <tr>.
-    // ================================================================
+
+
     function calcRow(id) {
         const tbody = document.getElementById('hr_' + id);
         if (!tbody) return;
-
-        let total_bruto_tbody = 0;
-        let total_potongan_tbody = 0;
-
-        // Hitung per <tr>
+        let total_bruto_tbody = 0, total_potongan_tbody = 0;
         tbody.querySelectorAll('tr').forEach(tr => {
             let bruto_tr = 0;
-
             tr.querySelectorAll('input[name="rincian_ids[]"]').forEach(ridInp => {
                 const rid    = ridInp.value;
-                // Cari td-qty/td-tarif/td-jml di dalam tr ini saja
                 const tdQty  = tr.querySelector(`td[data-rid="${rid}"][data-role="td-qty"]`);
                 const tdTarf = tr.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
                 const tdJml  = tr.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
                 if (!tdQty || !tdTarf || !tdJml) return;
-
                 const qtyInp = tdQty.querySelector('input[type="number"]');
                 const trfInp = tdTarf.querySelector('.inp-tarif');
                 const jmlInp = tdJml.querySelector('.inp-jml-display');
                 if (!qtyInp || !trfInp || !jmlInp) return;
-
-                const qty   = parseFloat(qtyInp.value) || 0;
-                const tarif = cleanNum(trfInp.value);
-                const jml   = qty * tarif;
+                const qty = parseFloat(qtyInp.value) || 0, tarif = cleanNum(trfInp.value), jml = qty * tarif;
                 bruto_tr += jml;
-
                 jmlInp.value = fmtRp(jml);
                 jmlInp.style.color = jml > 0 ? '#0d6efd' : '#94a3b8';
             });
-
-            // Hitung pajak & netto untuk tr ini
             const pajakInp = tr.querySelector('.inp-pajak-pct');
             const pct      = pajakInp ? cleanPct(pajakInp.value) : 0;
             const potongan = Math.round(bruto_tr * pct / 100);
             const netto    = bruto_tr - potongan;
-
             const txtBruto = tr.querySelector('.txt-total');
             const txtPot   = tr.querySelector('.txt-potongan');
             const txtNet   = tr.querySelector('.txt-netto');
             if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(bruto_tr);
             if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
             if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
-
             total_bruto_tbody    += bruto_tr;
             total_potongan_tbody += potongan;
         });
-
         calcSummary();
     }
 
-    // ================================================================
-    //  calcSummary — Update ringkasan bawah halaman
-    // ================================================================
     function calcSummary() {
         let sumB = 0, sumP = 0, count = 0;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
             count++;
-            // Jumlah semua bruto dan potongan dari seluruh <tr> di tbody ini
-            tbody.querySelectorAll('.txt-total').forEach(b   => { sumB += cleanNum(b.innerText); });
-            tbody.querySelectorAll('.txt-potongan').forEach(p => { sumP += cleanNum(p.innerText); });
+            tbody.querySelectorAll('.txt-total').forEach(b    => { sumB += cleanNum(b.innerText); });
+            tbody.querySelectorAll('.txt-potongan').forEach(p  => { sumP += cleanNum(p.innerText); });
         });
         document.getElementById('sumDosen').innerText = count + ' Dosen';
         document.getElementById('sumBruto').innerText = 'Rp ' + fmtRp(sumB);
@@ -1147,67 +903,35 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         document.getElementById('sumNetto').innerText = 'Rp ' + fmtRp(sumB - sumP);
     }
 
-    // ================================================================
-    //  submitHonorDetail & executeSubmit
-    // ================================================================
     function submitHonorDetail(isFinal) {
         if (document.querySelectorAll('#tblHonorDetail tbody.honor-row').length === 0) {
             Swal.fire('Ditolak', 'Minimal harus ada 1 entri dosen!', 'error'); return;
         }
         document.getElementById('inpFinalize').value = isFinal;
         if (isFinal) {
-            Swal.fire({
-                title: 'Finalisasi Honor?',
-                text: 'Data yang difinalisasi tidak bisa diedit kembali. Lanjutkan?',
-                icon: 'warning', showCancelButton: true,
-                confirmButtonColor: '#0d6efd', confirmButtonText: 'Ya, Finalisasi!'
-            }).then(r => { if (r.isConfirmed) executeSubmit(); });
-        } else {
-            executeSubmit();
-        }
+            Swal.fire({ title: 'Finalisasi Honor?', text: 'Data yang difinalisasi tidak bisa diedit kembali. Lanjutkan?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#0d6efd', confirmButtonText: 'Ya, Finalisasi!' }).then(r => { if (r.isConfirmed) executeSubmit(); });
+        } else { executeSubmit(); }
     }
 
     function executeSubmit() {
-        // ── Snapshot state aktif ke hidden inputs sebelum submit ──────
-        // Masalah: saat single_jafung_col, rid di DOM bisa berganti-ganti
-        // sehingga komp_qty_{rid}[] tidak konsisten. Solusi: buat snapshot
-        // flat (satu per dosen per grup) yang pasti konsisten.
         const form = document.getElementById('formDetailGen');
-
-        // Hapus snapshot lama jika ada
         form.querySelectorAll('input.snap-submit').forEach(el => el.remove());
-
-        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach((tbody, rowIdx) => {
-            // Kumpulkan semua td[data-role="td-qty"] dalam baris ini
+        document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach((tbody) => {
             tbody.querySelectorAll('td[data-role="td-qty"]').forEach(tdQty => {
-                const rid    = tdQty.dataset.rid;
-                const qtyInp = tdQty.querySelector('input[type="number"]');
+                const rid = tdQty.dataset.rid, qtyInp = tdQty.querySelector('input[type="number"]');
                 if (!rid || !qtyInp) return;
                 const qty = parseFloat(qtyInp.value) || 0;
-                if (qty <= 0) return; // skip kosong
-
-                // Ambil tarif dari td-tarif
+                if (qty <= 0) return;
                 const tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
                 const trfInp  = tdTarif ? tdTarif.querySelector('.inp-tarif') : null;
-                const tarif   = trfInp ? cleanNum(trfInp.value) : 0;
-
-                // Ambil kompId
-                const kidInp = tdTarif ? tdTarif.querySelector(`input[name^="komp_kompId_"]`) : null;
-                const kompId = kidInp ? kidInp.value : 0;
-
-                // Pastikan hidden rincian_ids[] dan komp_qty/tarif/kompId input
-                // di dalam form sudah benar. Jika belum ada atau rid-nya beda,
-                // tambahkan sebagai snapshot baru.
-                const hidRid = tdQty.querySelector('input[name="rincian_ids[]"]');
-                if (hidRid) hidRid.value = rid; // update ke rid aktif
-
-                // Pastikan komp_qty dan komp_tarif input namanya sesuai rid aktif
+                const kidInp  = tdTarif ? tdTarif.querySelector(`input[name^="komp_kompId_"]`) : null;
+                const hidRid  = tdQty.querySelector('input[name="rincian_ids[]"]');
+                if (hidRid) hidRid.value = rid;
                 if (qtyInp) qtyInp.name = `komp_qty_${rid}[]`;
                 if (trfInp) trfInp.name = `komp_tarif_${rid}[]`;
                 if (kidInp) kidInp.name = `komp_kompId_${rid}[]`;
             });
         });
-
         const fd  = new FormData(form);
         const btn = document.querySelector('[onclick="submitHonorDetail(0)"]');
         if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...'; btn.disabled = true; }
@@ -1215,12 +939,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             .then(r => r.json())
             .then(res => {
                 if (res.status === 'success') {
-                    Swal.fire({ icon: 'success', title: 'Berhasil', text: res.message, timer: 1500, showConfirmButton: false })
-                        .then(() => {
-                            if (document.getElementById('inpFinalize').value == 1)
-                                window.location.href = '?page=honorarium&tab=laporan';
-                            else window.location.reload();
-                        });
+                    Swal.fire({ icon: 'success', title: 'Berhasil', text: res.message, timer: 1500, showConfirmButton: false }).then(() => {
+                        if (document.getElementById('inpFinalize').value == 1) window.location.href = '?page=honorarium&tab=laporan';
+                        else window.location.reload();
+                    });
                 } else {
                     Swal.fire('Gagal', res.message, 'error');
                     if (btn) { btn.innerHTML = '<i class="fas fa-save me-2"></i>Simpan Draft'; btn.disabled = false; }
@@ -1228,7 +950,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             });
     }
 
-    // ── Inisialisasi ─────────────────────────────────────────────────
     function initHonorRows() {
         if (matrixDetails.length > 0) {
             matrixDetails.forEach(d => {
