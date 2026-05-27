@@ -117,6 +117,9 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     .table-gen td.td-aksi     { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 80px; }
     /* pastikan txt-* tidak punya display:block yg bisa menyebabkan geser */
     .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; font-weight: 700; }
+    /* FIX KOLOM GESER: cell yang disembunyikan tetap menempati kolom tabel */
+    .table-gen td.hidden-cell { visibility: hidden; pointer-events: none; padding: 0 !important; }
+    .table-gen td.hidden-cell * { visibility: hidden; }
 </style>
 
 <div class="animate__animated animate__fadeIn">
@@ -539,14 +542,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             let tdJml = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-jml"]`);
             const vertItems = vertGroup.items || [], isVertItem = vertItems.some(vi => String(vi.id_rincian) === rid);
             if (shouldShow) {
-                if (tdQty) { tdQty.style.visibility = ''; tdQty.style.opacity = ''; tdQty.style.pointerEvents = ''; }
-                if (tdTarif) { tdTarif.style.visibility = ''; tdTarif.style.opacity = ''; tdTarif.style.pointerEvents = ''; }
-                if (tdJml) { tdJml.style.visibility = ''; tdJml.style.opacity = ''; tdJml.style.pointerEvents = ''; }
+                // Tampilkan kembali - hapus class hidden-cell
+                if (tdQty) tdQty.classList.remove('hidden-cell');
+                if (tdTarif) tdTarif.classList.remove('hidden-cell');
+                if (tdJml) tdJml.classList.remove('hidden-cell');
                 if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = ''; }
             } else {
-                if (tdQty) { tdQty.style.visibility = 'hidden'; tdQty.style.opacity = '0'; tdQty.style.pointerEvents = 'none'; const qi = tdQty.querySelector('input[type="number"]'); if (qi) qi.value = 0; }
-                if (tdTarif) { tdTarif.style.visibility = 'hidden'; tdTarif.style.opacity = '0'; tdTarif.style.pointerEvents = 'none'; }
-                if (tdJml) { tdJml.style.visibility = 'hidden'; tdJml.style.opacity = '0'; tdJml.style.pointerEvents = 'none'; }
+                // Sembunyikan KONTEN tapi td tetap ada & menempati kolom
+                if (tdQty) { tdQty.classList.add('hidden-cell'); const qi = tdQty.querySelector('input[type="number"]'); if (qi) qi.value = 0; }
+                if (tdTarif) tdTarif.classList.add('hidden-cell');
+                if (tdJml) tdJml.classList.add('hidden-cell');
                 if (isVertItem && tdQty) { const tr = tdQty.closest('tr'); if (tr) tr.style.display = 'none'; }
             }
         });
@@ -822,14 +827,10 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const trNew = document.createElement('tr');
         trNew.className = 'honor-subrow';
 
-        // BUG FIX 1: Tambah hidden input dosen_id agar sub-row terbaca saat submit
-        const hidDosen = document.createElement('input');
-        hidDosen.type  = 'hidden';
-        hidDosen.name  = 'dosen_id[]';
-        hidDosen.value = dosenId;
-        trNew.appendChild(hidDosen);
+        // BUG FIX: Simpan dosen_id di data-attribute, akan di-inject via snap-submit saat submit
+        trNew.dataset.dosenId = dosenId;
 
-        // BUG FIX 1: Tambah hidden input pajak_pct sinkron dari baris utama
+        // BUG FIX: Simpan pajak dari baris utama
         const pajakParentVal = tbody.querySelector('.inp-pajak-pct')?.value || '0';
 
         const dSub = { dosen_id: dosenId, prodi: prodi, mata_kuliah: '', dosen_jabatan: jabatan, komponen: {} };
@@ -967,29 +968,34 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
             tbody.querySelectorAll('tr').forEach(tr => {
                 // Pastikan setiap tr punya dosen_id[] tersendiri
-                // (baris utama sudah ada select, sub-row sudah ada hidden dari addSubRowSameDosen)
-                // Cek apakah tr ini sudah punya dosen_id input/select
-                const hasDosenInput = tr.querySelector('select[name="dosen_id[]"], input[name="dosen_id[]"]');
+                // Cek apakah tr ini sudah punya dosen_id input/select (di dalam td)
+                const hasDosenInput = tr.querySelector('td select[name="dosen_id[]"], td input[name="dosen_id[]"]');
                 if (!hasDosenInput && dosenId) {
-                    // inject hidden dosen_id untuk sub-row yang mungkin belum punya
-                    const hid = document.createElement('input');
-                    hid.type  = 'hidden';
-                    hid.name  = 'dosen_id[]';
-                    hid.value = dosenId;
-                    hid.className = 'snap-submit';
-                    tr.appendChild(hid);
+                    // inject hidden dosen_id di dalam td pertama yang ada di tr ini
+                    const firstTd = tr.querySelector('td');
+                    if (firstTd) {
+                        const hid = document.createElement('input');
+                        hid.type  = 'hidden';
+                        hid.name  = 'dosen_id[]';
+                        hid.value = tr.dataset.dosenId || dosenId;
+                        hid.className = 'snap-submit';
+                        firstTd.appendChild(hid);
+                    }
                 }
 
-                // Pastikan pajak_pct[] ada di setiap tr
-                const hasPajak = tr.querySelector('input[name="pajak_pct[]"]');
+                // Pastikan pajak_pct[] ada di setiap tr (di dalam td)
+                const hasPajak = tr.querySelector('td input[name="pajak_pct[]"]');
                 if (!hasPajak) {
                     const pajakParent = tbody.querySelector('.inp-pajak-pct');
-                    const hidPajak = document.createElement('input');
-                    hidPajak.type  = 'hidden';
-                    hidPajak.name  = 'pajak_pct[]';
-                    hidPajak.value = pajakParent ? pajakParent.value : '0';
-                    hidPajak.className = 'snap-submit';
-                    tr.appendChild(hidPajak);
+                    const targetTd = tr.querySelector('td');
+                    if (targetTd) {
+                        const hidPajak = document.createElement('input');
+                        hidPajak.type  = 'hidden';
+                        hidPajak.name  = 'pajak_pct[]';
+                        hidPajak.value = pajakParent ? pajakParent.value : '0';
+                        hidPajak.className = 'snap-submit';
+                        targetTd.appendChild(hidPajak);
+                    }
                 }
 
                 // Sinkronkan nama input qty/tarif/kompId berdasarkan data-rid
