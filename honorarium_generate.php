@@ -327,6 +327,26 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     $hdr1 .= "<th rowspan='2' class='th-separator-potongan' style='min-width:140px; white-space:nowrap;'>POTONGAN</th>";
     $hdr1 .= "<th rowspan='2' class='th-separator-netto text-end pe-3' style='min-width:160px; white-space:nowrap;'>HONOR DITERIMA</th>";
     if(!$is_locked) $hdr1 .= "<th rowspan='2' class='th-separator-aksi' style='min-width:80px; white-space:nowrap;'>Aksi</th>";
+
+    // Hitung total kolom header secara eksplisit untuk sinkronisasi dengan JS
+    $total_header_cols = 2; // No + TENAGA PENGAJAR
+    $total_header_cols += count($teks_cols); // kolom teks
+    foreach ($horiz_groups as $gName => $items) {
+        $firstItem = $items[0] ?? null;
+        $gSingleCol = !empty($firstItem['single_jafung_col']);
+        $gHeader = $firstItem['group_header'] ?? '';
+        if ($gSingleCol) {
+            $total_header_cols += 3;
+        } else {
+            if (!empty($gHeader)) $total_header_cols += 1;
+            $total_header_cols += count($items) * 3;
+        }
+    }
+    if (count($vert_group_info['items']) > 0) {
+        $total_header_cols += 4; // header label + 3 sub-cols
+    }
+    $total_header_cols += 4; // TOTAL BRUTO + PAJAK + POTONGAN + HONOR DITERIMA
+    if (!$is_locked) $total_header_cols += 1; // Aksi
 ?>
 
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
@@ -404,6 +424,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     const vertGroup   = <?= json_encode($vert_group_info) ?>;
     const masterTarif = <?= json_encode($rincian_master) ?>;
     const jafungTarif = <?= json_encode($jafung_tarif_map ?? []) ?>;
+    const EXPECTED_COL_COUNT = <?= $total_header_cols ?>; // jumlah kolom yang harus ada di setiap tr
 
     let rCount = 0;
 
@@ -708,6 +729,21 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         }
 
         document.getElementById('tblHonorDetail').appendChild(tbody);
+        // FIX KOLOM GESER: pastikan jumlah td di tr1 = EXPECTED_COL_COUNT
+        const actualCols = tr1.querySelectorAll('td').length;
+        if (actualCols < EXPECTED_COL_COUNT) {
+            const diff = EXPECTED_COL_COUNT - actualCols;
+            console.warn(`[HONOR DEBUG] Row has ${actualCols} cells, expected ${EXPECTED_COL_COUNT}. Adding ${diff} empty cells before summary cols.`);
+            // Cari posisi TOTAL BRUTO cell (txt-total) dan insert empty cells sebelumnya
+            const txtTotalTd = tr1.querySelector('.txt-total');
+            for (let i = 0; i < diff; i++) {
+                const emptyTd = document.createElement('td');
+                emptyTd.className = 'align-middle';
+                emptyTd.innerHTML = '&nbsp;';
+                if (txtTotalTd) tr1.insertBefore(emptyTd, txtTotalTd);
+                else tr1.appendChild(emptyTd);
+            }
+        }
         reindexRows();
         setTimeout(() => calcRow(id), 0);
     }
@@ -875,6 +911,20 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         }
 
         tbody.appendChild(trNew);
+
+        // FIX KOLOM GESER: pastikan jumlah td di trNew = EXPECTED_COL_COUNT
+        const actualColsSub = trNew.querySelectorAll('td').length;
+        if (actualColsSub < EXPECTED_COL_COUNT) {
+            const diffSub = EXPECTED_COL_COUNT - actualColsSub;
+            const txtTotalTdSub = trNew.querySelector('.txt-total');
+            for (let i = 0; i < diffSub; i++) {
+                const emptyTd = document.createElement('td');
+                emptyTd.className = 'align-middle';
+                emptyTd.innerHTML = '&nbsp;';
+                if (txtTotalTdSub) trNew.insertBefore(emptyTd, txtTotalTdSub);
+                else trNew.appendChild(emptyTd);
+            }
+        }
 
         // Update rowspan No dan Dosen di tr pertama
         const trFirst = tbody.querySelector('tr:first-child');
