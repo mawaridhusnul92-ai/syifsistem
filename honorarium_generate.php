@@ -103,12 +103,20 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     /* Warna khusus input qty agar lebih jelas saat diisi */
     input.inp-qty { color: #0d6efd; font-weight: 700; }
 
-    /* ── FIX: Tenaga Pengajar selalu rata atas ── */
-    .td-dosen { vertical-align: top !important; padding-top: 8px !important; }
-    /* ── FIX: Pemisah visual kolom POTONGAN | HONOR DITERIMA | AKSI ── */
-    .td-potongan { border-left: 2px solid #94a3b8 !important; min-width: 130px; white-space: nowrap; }
-    .td-netto    { border-left: 2px solid #94a3b8 !important; min-width: 155px; white-space: nowrap; }
-    .td-aksi     { border-left: 2px solid #94a3b8 !important; min-width: 80px; }
+    /* ── FIX #2: Tenaga Pengajar selalu rata atas (vertical-align:top pada td) ── */
+    .table-gen td.td-dosen { vertical-align: top !important; padding-top: 10px !important; }
+
+    /* ── FIX #1: Kolom TOTAL BRUTO, PAJAK, POTONGAN, HONOR DITERIMA, AKSI ── */
+    /* Gunakan sticky + border-left agar tidak tergeser dan selalu terlihat di kanan */
+    .th-separator-potongan { border-left: 3px solid #64748b !important; background-color: #f1f5f9 !important; }
+    .th-separator-netto    { border-left: 3px solid #64748b !important; background-color: #dcfce7 !important; color: #166534 !important; }
+    .th-separator-aksi     { border-left: 3px solid #64748b !important; background-color: #f1f5f9 !important; }
+
+    .table-gen td.td-potongan { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 140px; white-space: nowrap; background-color: #fef2f2; }
+    .table-gen td.td-netto    { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 160px; white-space: nowrap; background-color: #f0fdf4; }
+    .table-gen td.td-aksi     { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 80px; }
+    /* pastikan txt-* tidak punya display:block yg bisa menyebabkan geser */
+    .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; font-weight: 700; }
 </style>
 
 <div class="animate__animated animate__fadeIn">
@@ -305,9 +313,9 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     // FIX: Tambah white-space:nowrap + min-width lebih besar + border-left pada kolom akhir
     $hdr1 .= "<th rowspan='2' style='min-width:130px; white-space:nowrap;'>TOTAL BRUTO</th>";
     $hdr1 .= "<th rowspan='2' style='min-width:80px; white-space:nowrap;'>PAJAK (%)</th>";
-    $hdr1 .= "<th rowspan='2' class='th-separator' style='min-width:130px; white-space:nowrap; border-left:2px solid #94a3b8;'>POTONGAN</th>";
-    $hdr1 .= "<th rowspan='2' class='th-separator text-end pe-3' style='min-width:155px; white-space:nowrap; border-left:2px solid #94a3b8;'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' class='th-separator' style='min-width:80px; white-space:nowrap; border-left:2px solid #94a3b8;'>Aksi</th>";
+    $hdr1 .= "<th rowspan='2' class='th-separator-potongan' style='min-width:140px; white-space:nowrap;'>POTONGAN</th>";
+    $hdr1 .= "<th rowspan='2' class='th-separator-netto text-end pe-3' style='min-width:160px; white-space:nowrap;'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th rowspan='2' class='th-separator-aksi' style='min-width:80px; white-space:nowrap;'>Aksi</th>";
 ?>
 
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
@@ -625,7 +633,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             if (d && String(o.val) === String(d.dosen_id)) opt.selected = true;
             selDosen.appendChild(opt);
         });
-        const tdDosen = createCell('', { cls: 'text-start td-dosen col-dosen' });
+        const tdDosen = createCell('', { cls: 'text-start td-dosen col-dosen', style: 'vertical-align:top !important; padding-top:10px;' });
         tdDosen.appendChild(selDosen);
         tr1.appendChild(tdDosen);
 

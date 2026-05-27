@@ -25,6 +25,7 @@ $sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun,
 $res = $conn->query($sql);
 
 $matrix = [];
+$dosen_order = []; // simpan urutan dosen agar nomor tetap konsisten
 $dosen = [];
 $t_bruto = 0; $t_pajak = 0;
 
@@ -34,27 +35,44 @@ $nama_template_doc = '';
 
 while($r = $res->fetch_assoc()) {
     $nama_gen_clean = strtoupper($r['nama_generate']);
-    $key = $r['dosen_id'] . '_' . md5($r['mata_kuliah'].$r['prodi']);
+    // Kunci utama = dosen_id (bukan + md5 mata kuliah), agar semua sub-row 1 dosen = 1 nomor
+    $dosen_key = $r['dosen_id'];
+    // Sub-key per baris mata kuliah/prodi
+    $sub_key = md5($r['mata_kuliah'].$r['prodi']);
     
-    if(!isset($matrix[$nama_gen_clean][$key])) {
-        $matrix[$nama_gen_clean][$key] = [
+    if(!isset($matrix[$nama_gen_clean][$dosen_key])) {
+        $matrix[$nama_gen_clean][$dosen_key] = [
             'dosen_nama' => $r['dosen_nama'],
-            'jabatan' => $r['jabatan'],
-            'prodi' => $r['prodi'] ?: $r['default_prodi'],
-            'mata_kuliah' => $r['mata_kuliah'],
-            'periode' => $nm_bln[$r['periode_bulan']] . ' ' . $r['periode_tahun'],
-            'komponen' => [],
-            'tot_bruto' => 0, 'tot_pajak' => 0, 'tot_netto' => 0, 'pajak_pct' => $r['persen_pajak']
+            'jabatan'    => $r['jabatan'],
+            'periode'    => $nm_bln[$r['periode_bulan']] . ' ' . $r['periode_tahun'],
+            'tot_bruto'  => 0, 'tot_pajak' => 0, 'tot_netto' => 0,
+            'sub_rows'   => [] // array sub-baris per mata kuliah
         ];
     }
     
-    $matrix[$nama_gen_clean][$key]['komponen'][$r['rincian_komponen_id']] = [
+    if(!isset($matrix[$nama_gen_clean][$dosen_key]['sub_rows'][$sub_key])) {
+        $matrix[$nama_gen_clean][$dosen_key]['sub_rows'][$sub_key] = [
+            'dosen_nama'  => $r['dosen_nama'],
+            'jabatan'     => $r['jabatan'],
+            'prodi'       => $r['prodi'] ?: $r['default_prodi'],
+            'mata_kuliah' => $r['mata_kuliah'],
+            'komponen'    => [],
+            'tot_bruto'   => 0, 'tot_pajak' => 0, 'tot_netto' => 0, 'pajak_pct' => $r['persen_pajak']
+        ];
+    }
+    
+    $matrix[$nama_gen_clean][$dosen_key]['sub_rows'][$sub_key]['komponen'][$r['rincian_komponen_id']] = [
         'qty' => $r['qty'], 'tarif' => $r['tarif'], 'jml' => $r['qty'] * $r['tarif']
     ];
     
-    $matrix[$nama_gen_clean][$key]['tot_bruto'] += ($r['qty'] * $r['tarif']);
-    $matrix[$nama_gen_clean][$key]['tot_pajak'] += $r['potongan_pajak'];
-    $matrix[$nama_gen_clean][$key]['tot_netto'] += $r['honor_diterima'];
+    $matrix[$nama_gen_clean][$dosen_key]['sub_rows'][$sub_key]['tot_bruto'] += ($r['qty'] * $r['tarif']);
+    $matrix[$nama_gen_clean][$dosen_key]['sub_rows'][$sub_key]['tot_pajak'] += $r['potongan_pajak'];
+    $matrix[$nama_gen_clean][$dosen_key]['sub_rows'][$sub_key]['tot_netto'] += $r['honor_diterima'];
+    
+    // Akumulasi total per dosen
+    $matrix[$nama_gen_clean][$dosen_key]['tot_bruto'] += ($r['qty'] * $r['tarif']);
+    $matrix[$nama_gen_clean][$dosen_key]['tot_pajak'] += $r['potongan_pajak'];
+    $matrix[$nama_gen_clean][$dosen_key]['tot_netto'] += $r['honor_diterima'];
     
     if (empty($dosen)) { $dosen = [ 'nama' => 'PENGELOLA KEUANGAN', 'periode' => $nm_bln[$r['periode_bulan']] . ' ' . $r['periode_tahun'] ]; }
     $layout_json = $r['custom_layout'] ?? '';
@@ -86,11 +104,18 @@ foreach($layout_cols as $c) {
 }
 
 // MEMBANGUN HEADER THEAD
+// Kolom NO selalu ada
 $th_row1 = "<th rowspan='2' width='3%'>No</th>";
+// Kolom TENAGA PENGAJAR selalu ada (merge cell utama per dosen)
+$th_row1 .= "<th rowspan='2' style='min-width:160px; text-align:left;'>TENAGA PENGAJAR</th>";
 $th_row2 = "";
-$col_count = 1;
+$col_count = 2; // No + TENAGA PENGAJAR
 
-foreach ($teks_cols as $t) { $th_row1 .= "<th rowspan='2'>".strtoupper($t['label'])."</th>"; $col_count++; }
+// Kolom teks lainnya (selain dosen_nama, karena dosen_nama sudah dirender khusus)
+foreach ($teks_cols as $t) {
+    if ($t['source'] === 'dosen_nama') continue; // sudah ada di kolom TENAGA PENGAJAR
+    $th_row1 .= "<th rowspan='2'>".strtoupper($t['label'])."</th>"; $col_count++;
+}
 
 foreach ($horiz_groups as $gName => $items) {
     $cs = count($items) * 3;
@@ -204,108 +229,142 @@ if (empty($signatures)) {
                 <tbody>
                     <?php 
                     $sub_bruto = 0; $sub_pajak = 0; $sub_netto = 0; $n = 1;
-                    foreach($items as $i): 
-                        $sub_bruto += (double)$i['tot_bruto']; $sub_pajak += (double)$i['tot_pajak']; $sub_netto += (double)$i['tot_netto'];
+                    foreach($items as $dosen_key => $dosen_item):
+                        $sub_bruto += (double)$dosen_item['tot_bruto']; 
+                        $sub_pajak += (double)$dosen_item['tot_pajak']; 
+                        $sub_netto += (double)$dosen_item['tot_netto'];
                         
-                        // FIX: $vItems harus ARRAY bukan integer count()
-                        $vItems = $vert_group_info['items'];
-                        $vCount = count($vItems);
-                        $rs = $vCount > 0 ? $vCount : 1;
+                        $sub_rows     = array_values($dosen_item['sub_rows']);
+                        $sub_row_cnt  = count($sub_rows);
+                        if ($sub_row_cnt < 1) $sub_row_cnt = 1;
+                        
+                        $vItems  = $vert_group_info['items'];
+                        $vCount  = count($vItems);
                         $has_vert = $vCount > 0;
 
-                        for ($vi = 0; $vi < $rs; $vi++) {
-                            echo "<tr>";
-                            
-                            // CETAK BARIS PERTAMA (Teks & Horizontal Cols)
-                            if ($vi === 0) {
-                                echo "<td class='text-center' rowspan='".($has_vert ? ($rs + 1) : $rs)."'>" . $n++ . "</td>";
+                        // Hitung total rowspan untuk kolom NO & TENAGA PENGAJAR
+                        // Setiap sub_row punya: $vCount baris vertikal (+1 baris TOTAL jika vertikal)
+                        // atau 1 baris jika non-vertikal
+                        $total_rowspan_dosen = 0;
+                        foreach ($sub_rows as $sr_tmp) {
+                            if ($has_vert) {
+                                $total_rowspan_dosen += $vCount + 1; // baris vertikal + baris TOTAL
+                            } else {
+                                $total_rowspan_dosen += 1;
+                            }
+                        }
+                        if ($total_rowspan_dosen < 1) $total_rowspan_dosen = 1;
+
+                        $first_sub_row = true;
+                        foreach ($sub_rows as $sr_idx => $i):
+
+                            $rs = $has_vert ? $vCount : 1;
+
+                            for ($vi = 0; $vi < $rs; $vi++) {
+                                echo "<tr>";
                                 
-                                foreach ($teks_cols as $t) {
-                                    // FIX: map source ke field yang benar di matrix $i
-                                    $src = $t['source'];
-                                    if ($src === 'prodi')        $val = htmlspecialchars($i['prodi'] ?? '-');
-                                    elseif ($src === 'mata_kuliah') $val = htmlspecialchars($i['mata_kuliah'] ?? '-');
-                                    elseif ($src === 'dosen_nama')  $val = htmlspecialchars($i['dosen_nama'] ?? '-');
-                                    elseif ($src === 'jabatan')     $val = htmlspecialchars($i['jabatan'] ?? '-');
-                                    else $val = htmlspecialchars($i[$src] ?? '-');
-                                    echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center'>$val</td>";
+                                // Kolom NO — hanya di baris pertama sub_row pertama, rowspan semua baris dosen ini
+                                if ($first_sub_row && $vi === 0) {
+                                    $rowspan_no = $total_rowspan_dosen;
+                                    echo "<td class='text-center fw-bold' rowspan='{$rowspan_no}' style='vertical-align:top; padding-top:8px;'>" . $n++ . "</td>";
                                 }
                                 
-                                foreach ($horiz_groups as $gName => $h_items) {
-                                    foreach($h_items as $h) {
-                                        $rid = $h['id_rincian'];
-                                        $q = $i['komponen'][$rid]['qty'] ?? 0;
-                                        $trf = $i['komponen'][$rid]['tarif'] ?? 0;
-                                        if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
-                                        $jml = $q * $trf;
-                                        $sat = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
-                                        $qty_disp = ($q>0) ? $q . ($sat ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat.'</small>' : '') : '-';
-                                        
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-center fw-bold'>$qty_disp</td>";
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
-                                        echo "<td rowspan='".($has_vert ? ($rs + 1) : $rs)."' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                // CETAK BARIS PERTAMA dari setiap sub_row (kolom Teks & Horizontal)
+                                if ($vi === 0) {
+                                    $rs_sub = $has_vert ? ($vCount + 1) : 1; // rowspan dalam 1 sub_row
+
+                                    // Kolom TENAGA PENGAJAR — hanya di baris pertama sub_row pertama, rowspan semua baris dosen
+                                    if ($first_sub_row) {
+                                        // Selalu render kolom TENAGA PENGAJAR (merge cell per dosen)
+                                        echo "<td rowspan='{$total_rowspan_dosen}' class='text-start fw-bold' style='vertical-align:top; padding-top:8px;'>" . htmlspecialchars($dosen_item['dosen_nama']) . "</td>";
+                                    }
+                                    
+                                    // Kolom teks lainnya (selain dosen_nama) — rowspan dalam sub_row ini saja
+                                    foreach ($teks_cols as $t) {
+                                        if ($t['source'] === 'dosen_nama') continue; // sudah dirender di atas
+                                        $src = $t['source'];
+                                        if ($src === 'prodi')        $val = htmlspecialchars($i['prodi'] ?? '-');
+                                        elseif ($src === 'mata_kuliah') $val = htmlspecialchars($i['mata_kuliah'] ?? '-');
+                                        elseif ($src === 'jabatan')     $val = htmlspecialchars($i['jabatan'] ?? '-');
+                                        else $val = htmlspecialchars($i[$src] ?? '-');
+                                        echo "<td rowspan='{$rs_sub}' class='text-center'>$val</td>";
+                                    }
+                                    
+                                    // Kolom horizontal
+                                    foreach ($horiz_groups as $gName => $h_items) {
+                                        foreach($h_items as $h) {
+                                            $rid = $h['id_rincian'];
+                                            $q   = $i['komponen'][$rid]['qty']   ?? 0;
+                                            $trf = $i['komponen'][$rid]['tarif'] ?? 0;
+                                            if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
+                                            $jml = $q * $trf;
+                                            $sat = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
+                                            $qty_disp = ($q>0) ? $q . ($sat ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat.'</small>' : '') : '-';
+                                            
+                                            echo "<td rowspan='{$rs_sub}' class='text-center fw-bold'>$qty_disp</td>";
+                                            echo "<td rowspan='{$rs_sub}' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
+                                            echo "<td rowspan='{$rs_sub}' class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                        }
                                     }
                                 }
-                            }
 
-                            // CETAK ITEM VERTIKAL — FIX: cek array $vItems bukan integer
-                            if ($vCount > 0 && isset($vItems[$vi])) {
-                                $v = $vItems[$vi];
-                                $rid = $v['id_rincian'];
-                                $q = $i['komponen'][$rid]['qty'] ?? 0;
-                                $trf = $i['komponen'][$rid]['tarif'] ?? 0;
-                                if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
-                                $jml = $q * $trf;
-                                $sat_v = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
-                                $qty_disp_v = ($q>0) ? $q . ($sat_v ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat_v.'</small>' : '') : '-';
-                                
-                                echo "<td>".htmlspecialchars($v['label'])."</td>";
-                                echo "<td class='text-center fw-bold'>$qty_disp_v</td>";
-                                echo "<td class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
-                                echo "<td class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
+                                // CETAK ITEM VERTIKAL
+                                if ($vCount > 0 && isset($vItems[$vi])) {
+                                    $v   = $vItems[$vi];
+                                    $rid = $v['id_rincian'];
+                                    $q   = $i['komponen'][$rid]['qty']   ?? 0;
+                                    $trf = $i['komponen'][$rid]['tarif'] ?? 0;
+                                    if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
+                                    $jml    = $q * $trf;
+                                    $sat_v  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
+                                    $qty_disp_v = ($q>0) ? $q . ($sat_v ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat_v.'</small>' : '') : '-';
+                                    
+                                    echo "<td>".htmlspecialchars($v['label'])."</td>";
+                                    echo "<td class='text-center fw-bold'>$qty_disp_v</td>";
+                                    echo "<td class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
+                                    echo "<td class='text-end fw-bold'>".($jml>0?number_format($jml,0,',','.'):'-')."</td>";
 
-                                // Untuk layout vertikal: tampilkan bruto, pajak, netto per baris uraian
-                                if ($has_vert) {
-                                    $pajak_pct_row = (float)($i['pajak_pct'] ?? $i['persen_pajak'] ?? 0);
-                                    $item_bruto = $jml;
-                                    $item_pajak = round($item_bruto * $pajak_pct_row / 100);
-                                    $item_netto = $item_bruto - $item_pajak;
+                                    $pajak_pct_row = (float)($i['pajak_pct'] ?? 0);
+                                    $item_bruto    = $jml;
+                                    $item_pajak    = round($item_bruto * $pajak_pct_row / 100);
+                                    $item_netto    = $item_bruto - $item_pajak;
                                     echo "<td class='text-end fw-bold'>".($item_bruto>0?number_format($item_bruto,0,',','.'):'-')."</td>";
                                     echo "<td class='text-center text-danger fw-bold'>".($item_pajak>0?'Rp '.number_format($item_pajak,0,',','.'):'-')."</td>";
                                     echo "<td class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".($item_netto>0?number_format($item_netto,0,',','.'):'-')."</td>";
-                                }
-                            } else if ($vCount === 0) {
-                                // tidak ada grup vertikal — skip
-                            } else {
-                                echo "<td></td><td></td><td></td><td></td>";
-                                if ($has_vert) {
+
+                                } else if ($vCount === 0) {
+                                    // tidak ada grup vertikal — skip
+                                } else {
+                                    echo "<td></td><td></td><td></td><td></td>";
                                     echo "<td></td><td></td><td></td>";
                                 }
+
+                                // CETAK TOTAL (Bruto, Pajak, Netto) — hanya untuk layout NON-vertikal, baris pertama sub_row
+                                if (!$has_vert && $vi === 0) {
+                                    echo "<td rowspan='1' class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
+                                    echo "<td rowspan='1' class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
+                                    echo "<td rowspan='1' class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
+                                }
+                                
+                                echo "</tr>";
                             }
 
-                            // CETAK TOTAL (Bruto, Pajak, Netto) — hanya untuk layout NON-vertikal
-                            if (!$has_vert && $vi === 0) {
-                                echo "<td rowspan='$rs' class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
-                                echo "<td rowspan='$rs' class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
-                                echo "<td rowspan='$rs' class='text-end fw-bold' style='background-color: #ccffcc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
+                            // Baris TOTAL per sub_row untuk layout vertikal
+                            if ($has_vert) {
+                                echo "<tr style='background-color: #e3f2fd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>";
+                                echo "<td class='fw-bold text-center'>TOTAL</td>";
+                                echo "<td class='text-center fw-bold'>-</td>";
+                                echo "<td class='text-end fw-bold'>-</td>";
+                                echo "<td class='text-end fw-bold'>-</td>";
+                                echo "<td class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
+                                echo "<td class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
+                                echo "<td class='text-end fw-bold' style='background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
+                                echo "</tr>";
                             }
-                            
-                            echo "</tr>";
-                        }
 
-                        // Untuk layout vertikal: tambahkan baris TOTAL di bawah semua item vertikal
-                        if ($has_vert) {
-                            echo "<tr style='background-color: #e3f2fd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>";
-                            echo "<td class='fw-bold text-center'>TOTAL</td>";
-                            echo "<td class='text-center fw-bold'>-</td>";
-                            echo "<td class='text-end fw-bold'>-</td>";
-                            echo "<td class='text-end fw-bold'>-</td>";
-                            echo "<td class='text-end fw-bold'>".number_format($i['tot_bruto'],0,',','.')."</td>";
-                            echo "<td class='text-center text-danger fw-bold'>Rp ".number_format($i['tot_pajak'],0,',','.')."</td>";
-                            echo "<td class='text-end fw-bold' style='background-color: #00ff00 !important; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact;'>".number_format($i['tot_netto'],0,',','.')."</td>";
-                            echo "</tr>";
-                        }
-                    endforeach; ?>
+                            $first_sub_row = false;
+                        endforeach; // end sub_rows
+                    endforeach; // end dosen ?>
                 </tbody>
                 <tfoot class="fw-bold" style="background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                     <tr>
