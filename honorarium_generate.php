@@ -180,6 +180,14 @@ if ($view_mode == 'detail' && $gen_id > 0) {
                         <input type="text" name="nama" id="inpNamaGen" class="form-control rounded-3 border fw-bold px-3 py-2" required placeholder="Contoh: Pembayaran Honor Smt Ganjil">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Nama Honorarium <span class="text-danger">*</span> <small class="text-muted fw-normal">(tampil di header print)</small></label>
+                        <input type="text" name="nama_honorarium" id="inpNamaHonor" class="form-control rounded-3 border fw-bold px-3 py-2" required placeholder="Contoh: Honor Dosen Buat Soal">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Periode Honorarium (Teks) <span class="text-danger">*</span> <small class="text-muted fw-normal">(tampil di print)</small></label>
+                        <input type="text" name="periode_honor_teks" id="inpPeriodeTeks" class="form-control rounded-3 border fw-bold px-3 py-2" required placeholder="Contoh: Semester Ganjil 2025/2026">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label small fw-bold text-primary">Pilih Layout Template Tabel <span class="text-danger">*</span></label>
                         <select name="template_id" id="inpTemplateGen" class="form-select rounded-3 border-primary shadow-sm fw-bold px-3 py-2 bg-white" required>
                             <option value="">-- Pilih Template --</option>
@@ -220,7 +228,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         });
     }
     function showModalGenerate() { document.getElementById('formNewGen').reset(); document.getElementById('actionGen').value = 'init_generate'; document.getElementById('titleGen').innerHTML = '<i class="fas fa-cogs me-2 text-warning"></i>Buat Batch Generate Honor'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
-    function editHeaderGen(g) { document.getElementById('actionGen').value = 'edit_generate_header'; document.getElementById('editGenId').value = g.id; document.getElementById('inpNamaGen').value = g.nama_generate; document.getElementById('inpTemplateGen').value = g.template_id; document.getElementById('inpBlnGen').value = g.periode_bulan; document.getElementById('inpThnGen').value = g.periode_tahun; document.getElementById('titleGen').innerHTML = '<i class="fas fa-edit me-2 text-warning"></i>Edit Batch Generate'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
+    function editHeaderGen(g) { document.getElementById('actionGen').value = 'edit_generate_header'; document.getElementById('editGenId').value = g.id; document.getElementById('inpNamaGen').value = g.nama_generate; document.getElementById('inpNamaHonor').value = g.nama_honorarium || ''; document.getElementById('inpPeriodeTeks').value = g.periode_honor_teks || ''; document.getElementById('inpTemplateGen').value = g.template_id; document.getElementById('inpBlnGen').value = g.periode_bulan; document.getElementById('inpThnGen').value = g.periode_tahun; document.getElementById('titleGen').innerHTML = '<i class="fas fa-edit me-2 text-warning"></i>Edit Batch Generate'; bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNewGen')).show(); }
     function batalGenerate(id) { Swal.fire({ title: 'Batalkan Generate?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Batalkan!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'batal_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.reload(); }); } }); }
     function hapusGenerate(id) { Swal.fire({ title: 'Hapus Draf?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!' }).then((result) => { if (result.isConfirmed) { const fd = new FormData(); fd.append('action', 'delete_generate'); fd.append('id', id); fetch('honorarium_action.php', { method: 'POST', body: fd }).then(r=>r.json()).then(res => { if(res.status == 'success') window.location.href='?page=honorarium&tab=generate'; }); } }); }
     </script>
@@ -398,6 +406,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
     function fmtRp(val) {
         return new Intl.NumberFormat('id-ID').format(Math.round(parseFloat(val) || 0));
+    }
+    function fmtQty(val) {
+        // Format qty ke 2 desimal, hilangkan trailing zero yang berlebihan
+        // misal: 15 → 15,00 | 15.5 → 15,50 | 15.55 → 15,55
+        const num = parseFloat(val) || 0;
+        return num.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     function cleanNum(str) {
         return parseFloat(String(str).replace(/[^0-9]/g, '')) || 0;
@@ -681,6 +695,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         }
 
         document.getElementById('tblHonorDetail').appendChild(tbody);
+        reindexRows();
         setTimeout(() => calcRow(id), 0);
     }
 
@@ -778,6 +793,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     // ================================================================
     //  addSubRowSameDosen — tambah <tr> baru ke tbody yang SAMA
     //  FIX: sel potongan/netto/aksi juga pakai class td-potongan/td-netto/td-aksi
+    //  FIX BUG1: tambahkan hidden input dosen_id agar sub-row ikut tersimpan
     // ================================================================
     function addSubRowSameDosen(tbodyId) {
         const tbody = document.getElementById(`hr_${tbodyId}`);
@@ -798,6 +814,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const trNew = document.createElement('tr');
         trNew.className = 'honor-subrow';
 
+        // BUG FIX 1: Tambah hidden input dosen_id agar sub-row terbaca saat submit
+        const hidDosen = document.createElement('input');
+        hidDosen.type  = 'hidden';
+        hidDosen.name  = 'dosen_id[]';
+        hidDosen.value = dosenId;
+        trNew.appendChild(hidDosen);
+
+        // BUG FIX 1: Tambah hidden input pajak_pct sinkron dari baris utama
+        const pajakParentVal = tbody.querySelector('.inp-pajak-pct')?.value || '0';
+
         const dSub = { dosen_id: dosenId, prodi: prodi, mata_kuliah: '', dosen_jabatan: jabatan, komponen: {} };
         _appendTeksCols(trNew, tbodyId, dSub, isLocked);
         appendKomponenCols(trNew, tbodyId, null);
@@ -807,8 +833,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
         inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
-        const pajakParent = tbody.querySelector('.inp-pajak-pct');
-        inpPajak.value = pajakParent ? pajakParent.value : '0';
+        inpPajak.value = pajakParentVal;
         inpPajak.placeholder = '0';
         inpPajak.setAttribute('inputmode', 'decimal');
         if (isLocked) inpPajak.disabled = true;
@@ -923,23 +948,60 @@ if ($view_mode == 'detail' && $gen_id > 0) {
 
     function executeSubmit() {
         const form = document.getElementById('formDetailGen');
+        // Hapus semua snap-submit lama
         form.querySelectorAll('input.snap-submit').forEach(el => el.remove());
+
+        // Iterasi setiap tbody (1 dosen), lalu setiap tr (sub-row)
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach((tbody) => {
-            tbody.querySelectorAll('td[data-role="td-qty"]').forEach(tdQty => {
-                const rid = tdQty.dataset.rid, qtyInp = tdQty.querySelector('input[type="number"]');
-                if (!rid || !qtyInp) return;
-                const qty = parseFloat(qtyInp.value) || 0;
-                if (qty <= 0) return;
-                const tdTarif = tbody.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
-                const trfInp  = tdTarif ? tdTarif.querySelector('.inp-tarif') : null;
-                const kidInp  = tdTarif ? tdTarif.querySelector(`input[name^="komp_kompId_"]`) : null;
-                const hidRid  = tdQty.querySelector('input[name="rincian_ids[]"]');
-                if (hidRid) hidRid.value = rid;
-                if (qtyInp) qtyInp.name = `komp_qty_${rid}[]`;
-                if (trfInp) trfInp.name = `komp_tarif_${rid}[]`;
-                if (kidInp) kidInp.name = `komp_kompId_${rid}[]`;
+            // Ambil dosen_id dari select di tbody
+            const selDosen = tbody.querySelector('select[name="dosen_id[]"]');
+            const dosenId  = selDosen ? selDosen.value : '';
+
+            tbody.querySelectorAll('tr').forEach(tr => {
+                // Pastikan setiap tr punya dosen_id[] tersendiri
+                // (baris utama sudah ada select, sub-row sudah ada hidden dari addSubRowSameDosen)
+                // Cek apakah tr ini sudah punya dosen_id input/select
+                const hasDosenInput = tr.querySelector('select[name="dosen_id[]"], input[name="dosen_id[]"]');
+                if (!hasDosenInput && dosenId) {
+                    // inject hidden dosen_id untuk sub-row yang mungkin belum punya
+                    const hid = document.createElement('input');
+                    hid.type  = 'hidden';
+                    hid.name  = 'dosen_id[]';
+                    hid.value = dosenId;
+                    hid.className = 'snap-submit';
+                    tr.appendChild(hid);
+                }
+
+                // Pastikan pajak_pct[] ada di setiap tr
+                const hasPajak = tr.querySelector('input[name="pajak_pct[]"]');
+                if (!hasPajak) {
+                    const pajakParent = tbody.querySelector('.inp-pajak-pct');
+                    const hidPajak = document.createElement('input');
+                    hidPajak.type  = 'hidden';
+                    hidPajak.name  = 'pajak_pct[]';
+                    hidPajak.value = pajakParent ? pajakParent.value : '0';
+                    hidPajak.className = 'snap-submit';
+                    tr.appendChild(hidPajak);
+                }
+
+                // Sinkronkan nama input qty/tarif/kompId berdasarkan data-rid
+                tr.querySelectorAll('td[data-role="td-qty"]').forEach(tdQty => {
+                    const rid    = tdQty.dataset.rid;
+                    const qtyInp = tdQty.querySelector('input[type="number"]');
+                    if (!rid || !qtyInp) return;
+                    // Cari tdTarif di tr yang sama
+                    const tdTarif = tr.querySelector(`td[data-rid="${rid}"][data-role="td-tarif"]`);
+                    const trfInp  = tdTarif ? tdTarif.querySelector('.inp-tarif') : null;
+                    const kidInp  = tdTarif ? tdTarif.querySelector('input[type="hidden"]') : null;
+                    const hidRid  = tdQty.querySelector('input[name="rincian_ids[]"]');
+                    if (hidRid) hidRid.value = rid;
+                    qtyInp.name = `komp_qty_${rid}[]`;
+                    if (trfInp) trfInp.name = `komp_tarif_${rid}[]`;
+                    if (kidInp) kidInp.name = `komp_kompId_${rid}[]`;
+                });
             });
         });
+
         const fd  = new FormData(form);
         const btn = document.querySelector('[onclick="submitHonorDetail(0)"]');
         if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...'; btn.disabled = true; }

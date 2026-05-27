@@ -14,7 +14,7 @@ $gen_id = (int)($_GET['gen_id'] ?? 0);
 
 if ($gen_id <= 0) die("<h3 style='padding: 50px;'>Parameter tidak valid.</h3>");
 
-$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun, 
+$sql = "SELECT d.*, g.nama_generate, g.periode_bulan, g.periode_tahun, g.nama_honorarium, g.periode_honor_teks,
         ds.nama as dosen_nama, ds.jabatan_fungsional as jabatan, ds.program_studi as default_prodi,
         t.custom_layout, t.nama_template
         FROM honor_generate_detail d
@@ -28,6 +28,8 @@ $matrix = [];
 $dosen_order = []; // simpan urutan dosen agar nomor tetap konsisten
 $dosen = [];
 $t_bruto = 0; $t_pajak = 0;
+$nama_honorarium_doc = '';
+$periode_honor_teks_doc = '';
 
 $nm_bln = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $layout_json = '';
@@ -77,6 +79,8 @@ while($r = $res->fetch_assoc()) {
     if (empty($dosen)) { $dosen = [ 'nama' => 'PENGELOLA KEUANGAN', 'periode' => $nm_bln[$r['periode_bulan']] . ' ' . $r['periode_tahun'] ]; }
     $layout_json = $r['custom_layout'] ?? '';
     $nama_template_doc = $r['nama_template'] ?? '';
+    if (empty($nama_honorarium_doc)) $nama_honorarium_doc = $r['nama_honorarium'] ?? '';
+    if (empty($periode_honor_teks_doc)) $periode_honor_teks_doc = $r['periode_honor_teks'] ?? '';
     
     $t_bruto += (double)$r['total_honor']; $t_pajak += (double)$r['potongan_pajak'];
 }
@@ -175,30 +179,37 @@ if (empty($signatures)) {
     <meta charset="UTF-8">
     <title>Cetak Laporan Rekap</title>
     <style>
-        @page { size: A4 landscape; margin: 10mm; }
-        body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; color: #000; margin: 0; background: #525659; }
-        .a4-landscape { background: #fff; width: 297mm; min-height: 210mm; margin: 0 auto; padding: 15mm; box-shadow: 0 10px 30px rgba(0,0,0,0.5); box-sizing: border-box; }
+        @page { size: A4 landscape; margin: 7mm; }
+        body { font-family: 'Arial', sans-serif; font-size: 8pt; color: #000; margin: 0; background: #525659; }
+        .a4-landscape { background: #fff; width: 281mm; min-height: 190mm; margin: 0 auto; padding: 6mm 8mm; box-shadow: 0 10px 30px rgba(0,0,0,0.5); box-sizing: border-box; overflow: hidden; }
         
-        .kop { display:flex; align-items:center; border-bottom:3px solid #000; padding-bottom:6px; margin-bottom:8px; }
-        .kop-logo { width:65px; margin-right:12px; flex-shrink:0; text-align:center;}
+        .kop { display:flex; align-items:center; border-bottom:3px solid #000; padding-bottom:4px; margin-bottom:5px; }
+        .kop-logo { width:52px; margin-right:10px; flex-shrink:0; text-align:center; }
         .kop-text { flex:1; text-align:center; }
-        .kop-text .kop-nama { font-size:16pt; font-weight:900; letter-spacing:1px; margin-bottom:4px; text-transform: uppercase; }
-        .kop-text .kop-alamat { font-size:11pt; line-height:1.5; }
+        .kop-text .kop-nama { font-size:13pt; font-weight:900; letter-spacing:0.5px; margin-bottom:2px; text-transform: uppercase; }
+        .kop-text .kop-judul-honor { font-size:11pt; font-weight:700; margin-top:3px; }
+        .kop-text .kop-periode { font-size:9pt; margin-top:2px; }
 
-        .doc-sub { text-align: left; font-size: 11pt; margin-bottom: 5mm; }
-        .tbl-data { width: 100%; border-collapse: collapse; margin-bottom: 8mm; font-size: 9pt; }
-        .tbl-data th, .tbl-data td { border: 1px solid #000; padding: 6px; vertical-align: middle; }
-        .tbl-data th { background-color: #f1f5f9 !important; text-transform: uppercase; font-size: 8pt; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: bold; }
-        .group-title { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2mm; margin-top: 5mm; color: #000;}
+        .tbl-data { width: 100%; border-collapse: collapse; margin-bottom: 4mm; font-size: 7pt; table-layout: auto; }
+        .tbl-data th, .tbl-data td { border: 0.5px solid #555; padding: 2px 3px; vertical-align: middle; word-break: break-word; }
+        .tbl-data th { background-color: #f1f5f9 !important; text-transform: uppercase; font-size: 6.5pt; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: bold; }
+        .group-title { font-size: 9pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1mm; margin-top: 3mm; color: #000; }
         .text-center { text-align: center; } .text-end { text-align: right; } .text-start { text-align: left; } .fw-bold { font-weight: bold; }
         
         /* ─── TANDA TANGAN ─── */
-        .ttd-section { display:flex; justify-content:space-around; margin-top:15px; }
+        .ttd-section { display:flex; justify-content:space-around; margin-top:8px; }
         .ttd-box { text-align:center; width: 30%; }
-        .ttd-box .ttd-lbl { font-weight:700; font-size:11pt; margin-bottom:2px; line-height:1.4; height: 30px; }
-        .ttd-box .ttd-name { font-weight:900; font-size:11pt; margin-top: 70px; text-decoration: underline;}
+        .ttd-box .ttd-lbl { font-weight:700; font-size:8pt; margin-bottom:2px; line-height:1.4; height: 22px; }
+        .ttd-box .ttd-name { font-weight:900; font-size:8pt; margin-top: 50px; text-decoration: underline; }
 
-        @media print { body { background: #fff; padding: 0; margin: 0; } .a4-landscape { box-shadow: none; margin: 0; width: 100%; height: auto; padding: 0; } .no-print { display: none !important; } }
+        @media print { 
+            body { background: #fff; padding: 0; margin: 0; font-size: 7pt; } 
+            .a4-landscape { box-shadow: none; margin: 0; width: 100%; height: auto; padding: 0; } 
+            .no-print { display: none !important; } 
+            .tbl-data { font-size: 6.5pt; }
+            .tbl-data th { font-size: 6pt; }
+            .tbl-data th, .tbl-data td { padding: 1.5px 2px; }
+        }
     </style>
 </head>
 <body onload="setTimeout(window.print, 500)">
@@ -212,15 +223,17 @@ if (empty($signatures)) {
         <div class="kop">
             <div class="kop-logo"><?= $logo_img ?></div>
             <div class="kop-text">
-                <div class="kop-nama"><?= $inst_name ?></div>
-                <div class="kop-alamat">LAPORAN PENGAJUAN: <?= htmlspecialchars($nama_template_doc) ?></div>
+                <div class="kop-nama"><?= htmlspecialchars($inst_name) ?></div>
+                <?php if (!empty($nama_honorarium_doc)): ?>
+                <div class="kop-judul-honor"><?= htmlspecialchars($nama_honorarium_doc) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($periode_honor_teks_doc)): ?>
+                <div class="kop-periode"><?= htmlspecialchars($periode_honor_teks_doc) ?></div>
+                <?php endif; ?>
             </div>
         </div>
-
-        <div class="doc-sub fw-bold">Periode Laporan: <?= strtoupper($dosen['periode'] ?? '') ?></div>
         
         <?php foreach($matrix as $nama_gen => $items): ?>
-            <div class="group-title"><?= htmlspecialchars($nama_gen) ?></div>
             <table class="tbl-data">
                 <thead>
                     <tr><?= $th_row1 ?></tr>
@@ -299,7 +312,7 @@ if (empty($signatures)) {
                                             if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
                                             $jml = $q * $trf;
                                             $sat = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
-                                            $qty_disp = ($q>0) ? $q . ($sat ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat.'</small>' : '') : '-';
+                                            $qty_disp = ($q>0) ? number_format($q,2,',','.') . ($sat ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat.'</small>' : '') : '-';
                                             
                                             echo "<td rowspan='{$rs_sub}' class='text-center fw-bold'>$qty_disp</td>";
                                             echo "<td rowspan='{$rs_sub}' class='text-end'>".($trf>0?number_format($trf,0,',','.'):'-')."</td>";
@@ -317,7 +330,7 @@ if (empty($signatures)) {
                                     if ($trf == 0 && isset($master_tarif[$rid])) $trf = $master_tarif[$rid]['besaran'];
                                     $jml    = $q * $trf;
                                     $sat_v  = !empty($master_tarif[$rid]['satuan']) ? $master_tarif[$rid]['satuan'] : '';
-                                    $qty_disp_v = ($q>0) ? $q . ($sat_v ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat_v.'</small>' : '') : '-';
+                                    $qty_disp_v = ($q>0) ? number_format($q,2,',','.') . ($sat_v ? '<br><small style="font-weight:normal;font-size:8px;color:#666;">'.$sat_v.'</small>' : '') : '-';
                                     
                                     echo "<td>".htmlspecialchars($v['label'])."</td>";
                                     echo "<td class='text-center fw-bold'>$qty_disp_v</td>";
