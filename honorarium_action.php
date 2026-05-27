@@ -129,6 +129,11 @@ $res_hg = $conn->query("SHOW COLUMNS FROM honor_generate");
 if ($res_hg) { while($rc = $res_hg->fetch_assoc()) $cols_hg[] = $rc['Field']; }
 if (!in_array('template_id', $cols_hg))
     $conn->query("ALTER TABLE honor_generate ADD COLUMN template_id INT DEFAULT NULL AFTER komponen_id");
+// Kolom baru: nama_honorarium dan periode_honor_teks
+if (!in_array('nama_honorarium', $cols_hg))
+    $conn->query("ALTER TABLE honor_generate ADD COLUMN nama_honorarium VARCHAR(200) DEFAULT '' AFTER template_id");
+if (!in_array('periode_honor_teks', $cols_hg))
+    $conn->query("ALTER TABLE honor_generate ADD COLUMN periode_honor_teks VARCHAR(100) DEFAULT '' AFTER nama_honorarium");
 
 // =============================================================
 // 7. MAIN ROUTER
@@ -343,13 +348,15 @@ try {
             $bulan   = postInt('bulan', date('n'));
             $tahun   = postInt('tahun', date('Y'));
             $catatan = esc($conn, postStr('catatan'));
+            $nama_honor = esc($conn, postStr('nama_honorarium'));
+            $periode_teks = esc($conn, postStr('periode_honor_teks'));
 
             if (empty($nama) || $tpl_id <= 0) {
                 echo json_encode(['status' => 'error', 'message' => 'Nama Batch dan Template wajib dipilih!']); break;
             }
 
             $kode = "GEN-{$tahun}-" . date('mdHis');
-            if ($conn->query("INSERT INTO honor_generate (kode_generate,nama_generate,template_id,periode_bulan,periode_tahun,tanggal_generate,catatan,status,total_honor,created_by) VALUES ('$kode','$nama',$tpl_id,$bulan,$tahun,NOW(),'$catatan','Draft',0,$uid)")) {
+            if ($conn->query("INSERT INTO honor_generate (kode_generate,nama_generate,template_id,nama_honorarium,periode_honor_teks,periode_bulan,periode_tahun,tanggal_generate,catatan,status,total_honor,created_by) VALUES ('$kode','$nama',$tpl_id,'$nama_honor','$periode_teks',$bulan,$tahun,NOW(),'$catatan','Draft',0,$uid)")) {
                 echo json_encode(['status' => 'success', 'message' => 'Batch generate berhasil dibuat!', 'id' => $conn->insert_id]);
             } else {
                 echo json_encode(['status' => 'error', 'message' => 'Gagal: ' . $conn->error]);
@@ -362,8 +369,10 @@ try {
             $tpl_id = postInt('template_id');
             $bulan  = postInt('bulan');
             $tahun  = postInt('tahun');
+            $nama_honor   = esc($conn, postStr('nama_honorarium'));
+            $periode_teks = esc($conn, postStr('periode_honor_teks'));
 
-            if ($conn->query("UPDATE honor_generate SET nama_generate='$nama',template_id=$tpl_id,periode_bulan=$bulan,periode_tahun=$tahun WHERE id=$id")) {
+            if ($conn->query("UPDATE honor_generate SET nama_generate='$nama',template_id=$tpl_id,periode_bulan=$bulan,periode_tahun=$tahun,nama_honorarium='$nama_honor',periode_honor_teks='$periode_teks' WHERE id=$id")) {
                 echo json_encode(['status' => 'success', 'message' => 'Header Generate diperbarui.']);
             } else {
                 echo json_encode(['status' => 'error', 'message' => 'Gagal update: ' . $conn->error]);
@@ -393,18 +402,15 @@ try {
                 echo json_encode(['status' => 'error', 'message' => 'Minimal harus ada 1 entri dosen!']); break;
             }
 
-            // ── Bangun peta rid → array nilai per-kemunculan ───────────
-            // Semua input komp_qty_{rid}[], komp_tarif_{rid}[], komp_kompId_{rid}[]
-            // diindeks berdasarkan urutan kemunculan rid di rincian_ids[].
-            // Karena executeSubmit sudah memastikan nama input konsisten,
-            // kita cukup iterasi dosen_ids dan ambil nilai dengan counter per-rid.
-
-            $rincian_ids = $_POST['rincian_ids'] ?? [];
-
-            // Pecah rincian_ids flat menjadi per-dosen.
-            // Jika total rincian_ids tidak habis dibagi n_dosen, pakai fallback.
-            $rids_per_row = ($n_dosen > 0 && count($rincian_ids) > 0)
-                ? (int)ceil(count($rincian_ids) / $n_dosen)
+            // ── REFACTORED: Setiap elemen dosen_ids[] sudah merepresentasikan 1 TR (baris)
+            // Karena executeSubmit JS kini memastikan setiap tr (termasuk sub-row) punya
+            // dosen_id[], teks_prodi[], teks_mata_kuliah[], pajak_pct[] sendiri.
+            // rincian_ids[] per baris = jumlah kolom komponen (semua tr punya jumlah sama).
+            // Kita hitung jumlah rincian per baris dari total rincian_ids / n_dosen.
+            $rincian_ids  = $_POST['rincian_ids'] ?? [];
+            $total_rid    = count($rincian_ids);
+            $rids_per_row = ($n_dosen > 0 && $total_rid > 0)
+                ? (int)round($total_rid / $n_dosen)
                 : 0;
 
             // Counter kemunculan per rid (untuk indexing array qty/tarif/kompId)
@@ -420,12 +426,12 @@ try {
                 $did = (int)$dosen_ids[$i];
                 if ($did <= 0) continue;
 
-                $prodi_val = esc($conn, $_POST['teks_prodi'][$i]       ?? '');
-                $mk_val    = esc($conn, $_POST['teks_mata_kuliah'][$i]  ?? '');
-                $jabatan_val = esc($conn, $_POST['teks_jabatan'][$i]    ?? '');
-                $pajak_pct   = (float)($_POST['pajak_pct'][$i]          ?? 0);
+                $prodi_val   = esc($conn, $_POST['teks_prodi'][$i]      ?? '');
+                $mk_val      = esc($conn, $_POST['teks_mata_kuliah'][$i] ?? '');
+                $jabatan_val = esc($conn, $_POST['teks_jabatan'][$i]     ?? '');
+                $pajak_pct   = (float)($_POST['pajak_pct'][$i]           ?? 0);
 
-                // Slice rincian_ids untuk dosen ini
+                // Slice rincian_ids untuk baris ke-$i
                 if ($rids_per_row > 0) {
                     $row_rids = array_slice($rincian_ids, $i * $rids_per_row, $rids_per_row);
                 } else {
