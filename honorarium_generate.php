@@ -90,7 +90,6 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     
     .th-group { background: #ffc107 !important; color: #000 !important; border-bottom: 2px solid #000 !important; }
     .cell-qty { min-width: 70px; text-align: center; } .cell-nom { min-width: 120px; text-align: right; } .cell-tot { min-width: 120px; text-align: right; font-weight: 800; background: #f8fafc; color: #0d6efd; white-space: nowrap; }
-    .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; min-width: 120px; display: block; }
     .btn-action { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px;}
     /* Highlight sel jumlah saat ada nilai */
     .inp-jml-display { text-align: right; font-weight: 700; color: #0d6efd; background: transparent; border: none; width: 100%; padding: 0; }
@@ -107,16 +106,15 @@ if ($view_mode == 'detail' && $gen_id > 0) {
     .table-gen td.td-dosen { vertical-align: top !important; padding-top: 10px !important; }
 
     /* ── FIX #1: Kolom TOTAL BRUTO, PAJAK, POTONGAN, HONOR DITERIMA, AKSI ── */
-    /* Gunakan sticky + border-left agar tidak tergeser dan selalu terlihat di kanan */
     .th-separator-potongan { border-left: 3px solid #64748b !important; background-color: #f1f5f9 !important; }
     .th-separator-netto    { border-left: 3px solid #64748b !important; background-color: #dcfce7 !important; color: #166534 !important; }
     .th-separator-aksi     { border-left: 3px solid #64748b !important; background-color: #f1f5f9 !important; }
 
-    .table-gen td.td-potongan { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 140px; white-space: nowrap; background-color: #fef2f2; }
-    .table-gen td.td-netto    { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 160px; white-space: nowrap; background-color: #f0fdf4; }
-    .table-gen td.td-aksi     { vertical-align: middle; border-left: 3px solid #94a3b8 !important; min-width: 80px; }
-    /* pastikan txt-* tidak punya display:block yg bisa menyebabkan geser */
-    .txt-total, .txt-potongan, .txt-netto { white-space: nowrap; font-weight: 700; }
+    .table-gen td.td-potongan { border-left: 3px solid #94a3b8 !important; min-width: 140px; white-space: nowrap; background-color: #fef2f2; text-align: right; font-weight: 700; color: #dc3545; }
+    .table-gen td.td-netto    { border-left: 3px solid #94a3b8 !important; min-width: 160px; white-space: nowrap; background-color: #f0fdf4; text-align: right; font-weight: 700; font-size: 1em; color: #198754; }
+    .table-gen td.td-aksi     { border-left: 3px solid #94a3b8 !important; min-width: 80px; text-align: center; }
+    .table-gen td.td-total-bruto { min-width: 130px; white-space: nowrap; text-align: right; font-weight: 700; }
+    .table-gen td.td-pajak-pct   { min-width: 80px; }
 </style>
 
 <div class="animate__animated animate__fadeIn">
@@ -310,12 +308,16 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         $hdr2 .= "<th class='cell-qty'>JML/QTY</th><th class='cell-nom'>TARIF (Rp)</th><th class='cell-tot'>JUMLAH</th>";
     }
 
-    // FIX: Tambah white-space:nowrap + min-width lebih besar + border-left pada kolom akhir
-    $hdr1 .= "<th rowspan='2' style='min-width:130px; white-space:nowrap;'>TOTAL BRUTO</th>";
-    $hdr1 .= "<th rowspan='2' style='min-width:80px; white-space:nowrap;'>PAJAK (%)</th>";
-    $hdr1 .= "<th rowspan='2' class='th-separator-potongan' style='min-width:140px; white-space:nowrap;'>POTONGAN</th>";
-    $hdr1 .= "<th rowspan='2' class='th-separator-netto text-end pe-3' style='min-width:160px; white-space:nowrap;'>HONOR DITERIMA</th>";
-    if(!$is_locked) $hdr1 .= "<th rowspan='2' class='th-separator-aksi' style='min-width:80px; white-space:nowrap;'>Aksi</th>";
+    // Kolom akhir (TOTAL BRUTO, PAJAK, POTONGAN, HONOR DITERIMA, AKSI)
+    // Gunakan rowspan='2' agar merge dua baris header, sejajar dengan sub-header komponen
+    $has_hdr2 = !empty($hdr2);
+    $rs_akhir = $has_hdr2 ? "rowspan='2'" : "";
+
+    $hdr1 .= "<th {$rs_akhir} style='min-width:130px; white-space:nowrap;'>TOTAL BRUTO</th>";
+    $hdr1 .= "<th {$rs_akhir} style='min-width:80px; white-space:nowrap;'>PAJAK (%)</th>";
+    $hdr1 .= "<th {$rs_akhir} class='th-separator-potongan' style='min-width:140px; white-space:nowrap;'>POTONGAN</th>";
+    $hdr1 .= "<th {$rs_akhir} class='th-separator-netto text-end pe-3' style='min-width:160px; white-space:nowrap;'>HONOR DITERIMA</th>";
+    if(!$is_locked) $hdr1 .= "<th {$rs_akhir} class='th-separator-aksi' style='min-width:80px; white-space:nowrap;'>Aksi</th>";
 ?>
 
     <div class="card border border-primary border-4 border-start-0 border-end-0 border-bottom-0 rounded-4 shadow-sm bg-white mb-3">
@@ -644,7 +646,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         appendKomponenCols(tr1, id, d);
 
         // Total / Pajak
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold text-dark td-total-bruto' }));
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
         inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
@@ -654,13 +656,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         inpPajak.oninput = inpPajak.onchange = function() {
             this.value = this.value.replace(/[^0-9.]/g, ''); calcRow(id);
         };
-        const tdPajak = createCell('', { cls: 'align-middle' });
+        const tdPajak = createCell('', { cls: 'td-pajak-pct' });
         tdPajak.appendChild(inpPajak); tr1.appendChild(tdPajak);
 
-        // FIX: Potongan / Honor Diterima / Aksi pakai class td-potongan / td-netto / td-aksi
-        // yang memberi border-left agar kolom tidak tergeser secara visual.
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan td-potongan' }));
-        tr1.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto td-netto' }));
+        // Potongan / Honor Diterima / Aksi
+        tr1.appendChild(createCell('Rp 0', { cls: 'td-potongan' }));
+        tr1.appendChild(createCell('Rp 0', { cls: 'td-netto' }));
 
         if (!readOnly) {
             const btnDel = document.createElement('button');
@@ -803,7 +804,7 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         appendKomponenCols(trNew, tbodyId, null);
 
         // Total / Pajak
-        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-dark txt-total', style: 'white-space:nowrap; min-width:130px;' }));
+        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold text-dark td-total-bruto' }));
         const inpPajak = document.createElement('input');
         inpPajak.type = 'text'; inpPajak.name = 'pajak_pct[]';
         inpPajak.className = 'inp-gen text-center text-danger inp-pajak-pct';
@@ -815,12 +816,12 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         inpPajak.oninput = inpPajak.onchange = function() {
             this.value = this.value.replace(/[^0-9.]/g, ''); calcRow(tbodyId);
         };
-        const tdPajak = createCell('', { cls: 'align-middle' });
+        const tdPajak = createCell('', { cls: 'td-pajak-pct' });
         tdPajak.appendChild(inpPajak); trNew.appendChild(tdPajak);
 
         // FIX: sama seperti baris utama
-        trNew.appendChild(createCell('Rp 0', { cls: 'text-end fw-bold align-middle text-danger txt-potongan td-potongan' }));
-        trNew.appendChild(createCell('Rp 0', { cls: 'text-end pe-3 fw-bold align-middle fs-6 text-success txt-netto td-netto' }));
+        trNew.appendChild(createCell('Rp 0', { cls: 'td-potongan' }));
+        trNew.appendChild(createCell('Rp 0', { cls: 'td-netto' }));
 
         if (!isLocked) {
             const btnDel = document.createElement('button');
@@ -886,9 +887,9 @@ if ($view_mode == 'detail' && $gen_id > 0) {
             const pct      = pajakInp ? cleanPct(pajakInp.value) : 0;
             const potongan = Math.round(bruto_tr * pct / 100);
             const netto    = bruto_tr - potongan;
-            const txtBruto = tr.querySelector('.txt-total');
-            const txtPot   = tr.querySelector('.txt-potongan');
-            const txtNet   = tr.querySelector('.txt-netto');
+            const txtBruto = tr.querySelector('.td-total-bruto');
+            const txtPot   = tr.querySelector('.td-potongan');
+            const txtNet   = tr.querySelector('.td-netto');
             if (txtBruto) txtBruto.innerText = 'Rp ' + fmtRp(bruto_tr);
             if (txtPot)   txtPot.innerText   = 'Rp ' + fmtRp(potongan);
             if (txtNet)   txtNet.innerText   = 'Rp ' + fmtRp(netto);
@@ -902,8 +903,8 @@ if ($view_mode == 'detail' && $gen_id > 0) {
         let sumB = 0, sumP = 0, count = 0;
         document.querySelectorAll('#tblHonorDetail tbody.honor-row').forEach(tbody => {
             count++;
-            tbody.querySelectorAll('.txt-total').forEach(b    => { sumB += cleanNum(b.innerText); });
-            tbody.querySelectorAll('.txt-potongan').forEach(p  => { sumP += cleanNum(p.innerText); });
+            tbody.querySelectorAll('.td-total-bruto').forEach(b => { sumB += cleanNum(b.innerText); });
+            tbody.querySelectorAll('.td-potongan').forEach(p  => { sumP += cleanNum(p.innerText); });
         });
         document.getElementById('sumDosen').innerText = count + ' Dosen';
         document.getElementById('sumBruto').innerText = 'Rp ' + fmtRp(sumB);
